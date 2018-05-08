@@ -7,7 +7,7 @@
     "test"
   ],
   "scripts": {
-    "test": "scripts/test.sh",
+    "test": "sh scripts/test.sh",
 
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -16,8 +16,8 @@
     "lint:all": "npm run lint && npm run lint:sol",
     "lint:all:fix": "npm run lint:fix && npm run lint:sol:fix",
 
-    "console": "truffle console",
-    "coverage": "scripts/coverage.sh",
+    "console": "node_modules/.bin/truffle console",
+    "coverage": "sh scripts/coverage.sh",
     "version": "scripts/version.js"
   },
 
@@ -27,12 +27,13 @@
   },
   
   "keywords": [
+    "grapevine",
+    "healthcare",
     "solidity",
     "ethereum",
     "smart",
     "contracts",
-    "security",
-    "zeppelin"
+    "security"
   ],
   "author": "Abdallah Miladi <abdallah.miladi@tiani-spirit.com>, Massimiliano Masi <massimiliano.masi@tiani-spirit.com>",
   "license": "MIT",
