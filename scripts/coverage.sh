@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-SOLIDITY_COVERAGE=true scripts/test.sh
+export SOLIDITY_COVERAGE=true; sh scripts/test.sh;
