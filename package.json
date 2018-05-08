@@ -23,7 +23,7 @@
 
   "repository": {
     "type": "git",
-    "url": "TO_BE_DEFINED!"
+    "url": "https://github.com/GrapevineWorld/crowdsale-contracts.git"
   },
   
   "keywords": [
@@ -37,11 +37,11 @@
   "author": "Abdallah Miladi <abdallah.miladi@tiani-spirit.com>, Massimiliano Masi <massimiliano.masi@tiani-spirit.com>",
   "license": "MIT",
   "bugs": {
-    "url": "TO_BE_DEFINED!"
+    "url": "https://github.com/GrapevineWorld/crowdsale-contracts/issues"
   },
-  "homepage": "TO_BE_DEFINED!",
+  "homepage": "https://github.com/GrapevineWorld/crowdsale-contracts",
   "dependencies": {
-    "zeppelin-solidity": "^1.9.0"
+    "openzeppelin-solidity": "^1.9.0"
   },
   "devDependencies": {
     "babel-polyfill": "^6.26.0",
