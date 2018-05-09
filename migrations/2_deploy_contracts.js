@@ -4,13 +4,13 @@ const GrapevineToken = artifacts.require('./GrapevineToken.sol');
 module.exports = function (deployer, network, accounts) {
   var openingTime;
   // owner of the crowdsale
-  const  owner = web3.eth.accounts[0];
+  const owner = web3.eth.accounts[0];
   
   // wallet where the ehter will get deposited
-  const  wallet = web3.eth.accounts[1];
+  const wallet = web3.eth.accounts[1];
   
   // tokenWallet where the crowdsale tokens are located!
-  const  tokenWallet = web3.eth.accounts[2];
+  const tokenWallet = web3.eth.accounts[2];
   
   const rate = new web3.BigNumber(1);
   const cap = 1000 * (10 ** 18);
