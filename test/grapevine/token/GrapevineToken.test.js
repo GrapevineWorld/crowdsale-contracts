@@ -1,6 +1,4 @@
-import assertRevert from '../helpers/assertRevert';
-// seems to be a problem with babel!
-// import assertRevert from 'openzeppelin-solidity/test/helpers/assertRevert';
+import assertRevert from 'openzeppelin-solidity/test/helpers/assertRevert';
 
 const BigNumber = web3.BigNumber;
 
