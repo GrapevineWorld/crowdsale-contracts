@@ -1,12 +1,8 @@
-
-import ether from '../helpers/ether';
-import assertRevert from '../helpers/assertRevert';
-import { advanceBlock } from '../helpers/advanceToBlock';
-import { increaseTimeTo, duration } from '../helpers/increaseTime';
-import latestTime from '../helpers/latestTime';
-
-// seems to be a problem with babel!
-// import assertRevert from 'openzeppelin-solidity/test/helpers/assertRevert';
+import ether from 'openzeppelin-solidity/test/helpers/ether';
+import assertRevert from 'openzeppelin-solidity/test/helpers/assertRevert';
+import { advanceBlock } from 'openzeppelin-solidity/test/helpers/advanceToBlock';
+import { increaseTimeTo, duration } from 'openzeppelin-solidity/test/helpers/increaseTime';
+import latestTime from 'openzeppelin-solidity/test/helpers/latestTime';
 
 const BigNumber = web3.BigNumber;
 
