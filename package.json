@@ -38,7 +38,7 @@
     "security"
   ],
   "author": "Abdallah Miladi <abdallah.miladi@tiani-spirit.com>, Massimiliano Masi <massimiliano.masi@tiani-spirit.com>",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/GrapevineWorld/crowdsale-contracts/issues"
   },
