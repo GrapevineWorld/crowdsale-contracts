@@ -13,7 +13,9 @@ module.exports = async function (deployer, network, accounts) {
   const tokenWallet = web3.eth.accounts[2];
   
   const rate = new web3.BigNumber(1);
-  const cap = 1000 * (10 ** 18);
+  const hardCap = 1000 * (10 ** 18);
+  const softCap = 10 * (10 ** 18);
+
   if (network === 'rinkeby') {
     openingTime = web3.eth.getBlock('latest').timestamp + 300; // five minutes in the future
   } else {
@@ -38,7 +40,8 @@ module.exports = async function (deployer, network, accounts) {
     GrapevineToken.address,
     openingTime,
     closingTime,
-    cap,
+    softCap,
+    hardCap,
     tokenWallet,
     { from: owner }
   );
