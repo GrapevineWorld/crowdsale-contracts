@@ -1,5 +1,6 @@
 pragma solidity 0.4.23;
 
+import "openzeppelin-solidity/contracts/crowdsale/distribution/RefundableCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/emission/AllowanceCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/TimedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/CappedCrowdsale.sol";
@@ -12,7 +13,7 @@ import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
  * @dev Grapevine Crowdsale
  **/
 
-contract GrapevineCrowdsale is CappedCrowdsale, AllowanceCrowdsale, TimedCrowdsale, Pausable {
+contract GrapevineCrowdsale is CappedCrowdsale, AllowanceCrowdsale, TimedCrowdsale, Pausable, RefundableCrowdsale {
 
     /**
     * @param _rate Number of token units a buyer gets per wei
@@ -20,7 +21,8 @@ contract GrapevineCrowdsale is CappedCrowdsale, AllowanceCrowdsale, TimedCrowdsa
     * @param _token Address of the token being sold
     * @param _openingTime Crowdsale opening time
     * @param _closingTime Crowdsale closing time
-    * @param _cap Max amount of wei to be contributed
+    * @param _softCap Funding goal
+    * @param _hardCap Max amount of wei to be contributed
     * @param _tokenWallet Address holding the tokens, which has approved allowance to the crowdsale
     */
   constructor(
@@ -29,12 +31,14 @@ contract GrapevineCrowdsale is CappedCrowdsale, AllowanceCrowdsale, TimedCrowdsa
     ERC20 _token, 
     uint256 _openingTime, 
     uint256 _closingTime, 
-    uint256 _cap, 
+    uint256 _softCap, 
+    uint256 _hardCap, 
     address _tokenWallet)
     Crowdsale(_rate, _wallet, _token)
-    CappedCrowdsale(_cap)
+    CappedCrowdsale(_hardCap)
     TimedCrowdsale(_openingTime, _closingTime) 
     AllowanceCrowdsale(_tokenWallet)
+    RefundableCrowdsale(_softCap)
     public
     {
         
