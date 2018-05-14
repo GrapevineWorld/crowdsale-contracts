@@ -3,6 +3,7 @@ import assertRevert from 'openzeppelin-solidity/test/helpers/assertRevert';
 import { advanceBlock } from 'openzeppelin-solidity/test/helpers/advanceToBlock';
 import { increaseTimeTo, duration } from 'openzeppelin-solidity/test/helpers/increaseTime';
 import latestTime from 'openzeppelin-solidity/test/helpers/latestTime';
+import EVMRevert from 'openzeppelin-solidity/test/helpers/EVMRevert';
 
 const BigNumber = web3.BigNumber;
 
@@ -19,6 +20,7 @@ contract('GrapevineCrowdsale', accounts => {
   let grapevineToken;
   let openingTime;
   let closingTime;
+  let afterClosingTime;
 
   // owner of the token contract
   var _owner = accounts[0];
@@ -27,7 +29,10 @@ contract('GrapevineCrowdsale', accounts => {
   var _tokenWallet = accounts[3];
 
   const _rate = new BigNumber(1);
-  const _cap = ether(100);
+  const _hardCap = ether(100);
+  const _softCap = ether(10);
+  const _lessThanSoftCap = ether(9);
+
   const _value = ether(1);
   const tokens = _rate.mul(_value);
 
@@ -40,6 +45,7 @@ contract('GrapevineCrowdsale', accounts => {
     grapevineToken = await GrapevineToken.new({ from: _owner });
     openingTime = latestTime() + duration.weeks(1);
     closingTime = openingTime + duration.weeks(4);
+    afterClosingTime = closingTime + duration.seconds(1);
 
     grapevineCrowdsale = await GrapevineCrowdsale.new(
       _rate,
@@ -47,7 +53,8 @@ contract('GrapevineCrowdsale', accounts => {
       grapevineToken.address,
       openingTime,
       closingTime,
-      _cap,
+      _softCap,
+      _hardCap,
       _tokenWallet,
       { from: _owner });
 
@@ -81,14 +88,15 @@ contract('GrapevineCrowdsale', accounts => {
       walletBuyerAfter.should.be.bignumber.equal(expectedBuyerWallet);
     });
 
-    it('should forward funds to wallet', async function () {
+    // This test is not successfull anymore, because the funds are put in a vault!
+    /* it('should forward funds to wallet', async function () {
       const walletOwnerBefore = web3.eth.getBalance(_wallet);
       await grapevineCrowdsale.sendTransaction(
         { from: _buyer, to: grapevineCrowdsale.address, value: _value });
       const walletOwnerAfter = web3.eth.getBalance(_wallet);
       const expectedOwnerWallet = walletOwnerBefore.add(_value);
       walletOwnerAfter.should.be.bignumber.equal(expectedOwnerWallet);
-    });
+    }); */
 
     it('should assign tokens to sender', async function () {
       const balanceBuyerBefore = await grapevineToken.balanceOf(_buyer);
@@ -111,10 +119,47 @@ contract('GrapevineCrowdsale', accounts => {
       event.args.amount.should.be.bignumber.equal(tokens);
     });
 
-    it('reverts when trying to buy tokens when contract is paused paused', async function () {
+    it('reverts when trying to buy tokens when contract is paused', async function () {
       await grapevineCrowdsale.pause({ from: _owner });
       await assertRevert(grapevineCrowdsale.sendTransaction(
         { from: _buyer, to: grapevineCrowdsale.address, value: ether(10) }));
+    });
+  });
+
+  describe('softCap handling', function () {
+    it('should deny refunds before end', async function () {
+      await grapevineCrowdsale.claimRefund({ from: _buyer }).should.be.rejectedWith(EVMRevert);
+      await increaseTimeTo(openingTime);
+      await grapevineCrowdsale.claimRefund({ from: _buyer }).should.be.rejectedWith(EVMRevert);
+    });
+
+    it('should deny refunds after end if goal was reached', async function () {
+      await increaseTimeTo(openingTime);
+      await grapevineCrowdsale.sendTransaction({ value: _softCap, from: _buyer });
+      await increaseTimeTo(afterClosingTime);
+      await grapevineCrowdsale.claimRefund({ from: _buyer }).should.be.rejectedWith(EVMRevert);
+    });
+
+    it('should allow refunds after end if goal was not reached', async function () {
+      await increaseTimeTo(openingTime);
+      await grapevineCrowdsale.sendTransaction({ value: _lessThanSoftCap, from: _buyer });
+      await increaseTimeTo(afterClosingTime);
+      await grapevineCrowdsale.finalize({ from: _owner });
+      const pre = web3.eth.getBalance(_buyer);
+      await grapevineCrowdsale.claimRefund({ from: _buyer, gasPrice: 0 })
+        .should.be.fulfilled;
+      const post = web3.eth.getBalance(_buyer);
+      post.minus(pre).should.be.bignumber.equal(_lessThanSoftCap);
+    });
+
+    it('should forward funds to wallet after end if goal was reached', async function () {
+      await increaseTimeTo(openingTime);
+      await grapevineCrowdsale.sendTransaction({ value: _softCap, from: _buyer });
+      await increaseTimeTo(afterClosingTime);
+      const pre = web3.eth.getBalance(_wallet);
+      await grapevineCrowdsale.finalize({ from: _owner });
+      const post = web3.eth.getBalance(_wallet);
+      post.minus(pre).should.be.bignumber.equal(_softCap);
     });
   });
 });
