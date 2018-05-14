@@ -21,6 +21,7 @@ contract('GrapevineCrowdsale', accounts => {
   let openingTime;
   let closingTime;
   let afterClosingTime;
+  let totalSupply;
 
   // owner of the token contract
   var _owner = accounts[0];
@@ -29,9 +30,10 @@ contract('GrapevineCrowdsale', accounts => {
   var _tokenWallet = accounts[3];
 
   const _rate = new BigNumber(1);
-  const _hardCap = ether(100);
-  const _softCap = ether(10);
-  const _lessThanSoftCap = ether(9);
+  const _hardCap = ether(5);
+  const _lessThanHardCap = ether(4);
+  const _softCap = ether(3);
+  const _lessThanSoftCap = ether(1);
 
   const _value = ether(1);
   const tokens = _rate.mul(_value);
@@ -59,7 +61,7 @@ contract('GrapevineCrowdsale', accounts => {
       { from: _owner });
 
     // it depends on the stratergy!
-    const totalSupply = await grapevineToken.totalSupply();
+    totalSupply = await grapevineToken.totalSupply();
     const crowdsaleAddress = grapevineCrowdsale.address;
     await grapevineToken.addAddressToWhitelist(_tokenWallet, { from: _owner });
     await grapevineToken.addAddressToWhitelist(crowdsaleAddress, { from: _owner });
@@ -122,7 +124,14 @@ contract('GrapevineCrowdsale', accounts => {
     it('reverts when trying to buy tokens when contract is paused', async function () {
       await grapevineCrowdsale.pause({ from: _owner });
       await assertRevert(grapevineCrowdsale.sendTransaction(
-        { from: _buyer, to: grapevineCrowdsale.address, value: ether(10) }));
+        { from: _buyer, to: grapevineCrowdsale.address, value: ether(1) }));
+    });
+
+    it('should report correct allowace left', async function () {
+      let remainingAllowance = totalSupply.minus(tokens);
+      await grapevineCrowdsale.sendTransaction({ value: _value, from: _buyer });
+      let tokensRemaining = await grapevineCrowdsale.remainingTokens();
+      tokensRemaining.should.be.bignumber.equal(remainingAllowance);
     });
   });
 
@@ -160,6 +169,54 @@ contract('GrapevineCrowdsale', accounts => {
       await grapevineCrowdsale.finalize({ from: _owner });
       const post = web3.eth.getBalance(_wallet);
       post.minus(pre).should.be.bignumber.equal(_softCap);
+    });
+  });
+
+  describe('hardCap handling', function () {
+    
+    beforeEach(async function () {
+      await increaseTimeTo(openingTime);
+    });
+
+    describe('accepting payments', function () {
+      it('should accept payments within cap', async function () {
+        let amount = _hardCap.minus(_lessThanHardCap);
+        await grapevineCrowdsale.sendTransaction({ value: amount, from: _buyer }).should.be.fulfilled;
+        await grapevineCrowdsale.sendTransaction({ value: _lessThanHardCap, from: _buyer }).should.be.fulfilled;
+      });
+  
+      it('should reject payments outside cap', async function () {
+        await grapevineCrowdsale.sendTransaction({ value: _hardCap, from: _buyer });
+        await grapevineCrowdsale.sendTransaction({ value: 1, from: _buyer }).should.be.rejectedWith(EVMRevert);
+      });
+  
+      it('should reject payments that exceed cap', async function () {
+        let amount = _hardCap.add(1);
+        await grapevineCrowdsale.sendTransaction({ value: amount, from: _buyer }).should.be.rejectedWith(EVMRevert);
+      });
+    });
+  
+    describe('ending', function () {
+      it('should not reach cap if sent under cap', async function () {
+        let capReached = await grapevineCrowdsale.capReached();
+        capReached.should.equal(false);
+        await grapevineCrowdsale.sendTransaction({ value: _lessThanHardCap, from: _buyer });
+        capReached = await grapevineCrowdsale.capReached();
+        capReached.should.equal(false);
+      });
+  
+      it('should not reach cap if sent just under cap', async function () {
+        let amount = _hardCap.minus(1);
+        await grapevineCrowdsale.sendTransaction({ value: amount, from: _buyer });
+        let capReached = await grapevineCrowdsale.capReached();
+        capReached.should.equal(false);
+      });
+  
+      it('should reach cap if cap sent', async function () {
+        await grapevineCrowdsale.sendTransaction({ value: _hardCap, from: _buyer });
+        let capReached = await grapevineCrowdsale.capReached();
+        capReached.should.equal(true);
+      });
     });
   });
 });
