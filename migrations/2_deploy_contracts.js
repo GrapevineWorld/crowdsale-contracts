@@ -1,5 +1,7 @@
-const GrapevineCrowdsale = artifacts.require('./GrapevineCrowdsale.sol');
-const GrapevineToken = artifacts.require('./GrapevineToken.sol');
+const SafeMath = artifacts.require('SafeMath');
+const GrapevineCrowdsale = artifacts.require('GrapevineCrowdsale.sol');
+const GrapevineToken = artifacts.require('GrapevineToken.sol');
+const TokenTimelockController = artifacts.require('TokenTimelockController.sol');
 
 module.exports = async function (deployer, network, accounts) {
   var openingTime;
@@ -7,23 +9,22 @@ module.exports = async function (deployer, network, accounts) {
   const owner = web3.eth.accounts[0];
   
   // wallet where the ehter will get deposited
-  const wallet = web3.eth.accounts[1];
+  const wallet = web3.eth.accounts[2];
   
-  // tokenWallet where the crowdsale tokens are located!
-  const tokenWallet = web3.eth.accounts[2];
-  
+  const saleTokenPercentage = 0.45;
+
   const rate = new web3.BigNumber(1);
-  const hardCap = 1000 * (10 ** 18);
-  const softCap = 10 * (10 ** 18);
+  const hardCap = web3.toWei(10, 'ether');
+  const softCap = web3.toWei(1, 'ether');
 
   if (network === 'rinkeby') {
     openingTime = web3.eth.getBlock('latest').timestamp + 300; // five minutes in the future
   } else {
-    openingTime = web3.eth.getBlock('latest').timestamp + 60; // one minute in the future
+    openingTime = web3.eth.getBlock('latest').timestamp + 30; // thirty seconds in the future
   }
 
-  // const closingTime = openingTime + 86400 * 20; // 20 days
-  const closingTime = openingTime + 86400; // 1 day
+  const closingTime = openingTime + 86400 * 30; // 30 days
+  // const closingTime = openingTime + 600; // 10 mn
 
   console.log('openingTime: ' + openingTime);
   console.log('closingTime: ' + closingTime);
@@ -31,25 +32,56 @@ module.exports = async function (deployer, network, accounts) {
   console.log('Owner address: ' + owner);
   console.log('Wallet address: ' + wallet);
 
-  await deployer.deploy(GrapevineToken, { from: owner });
-  var grapevineToken = await GrapevineToken.deployed();
-  await deployer.deploy(
-    GrapevineCrowdsale,
-    rate,
-    wallet,
-    GrapevineToken.address,
-    openingTime,
-    closingTime,
-    softCap,
-    hardCap,
-    tokenWallet,
-    { from: owner }
-  );
-  var grapevineCrowdsale = await GrapevineCrowdsale.deployed();
-  const crowdsaleAddress = grapevineCrowdsale.address;
-  const totalSupply = await grapevineToken.totalSupply({ from: owner });
-  await grapevineToken.addAddressToWhitelist(tokenWallet, { from: owner });
-  await grapevineToken.addAddressToWhitelist(crowdsaleAddress, { from: owner });
-  await grapevineToken.transfer(tokenWallet, totalSupply, { from: owner });
-  await grapevineToken.approve(crowdsaleAddress, totalSupply, { from: tokenWallet });
+  return deployer.then(function () {
+    // deploy SafeMath first
+    return deployer.deploy(SafeMath);
+  }).then(function () {
+    // link SafeMath
+    return deployer.link(
+      SafeMath,
+      [GrapevineToken, TokenTimelockController, GrapevineCrowdsale]
+    );
+  }).then(function () {
+    return deployer.deploy(
+      GrapevineToken,
+      { from: owner }
+    );
+  }).then(function () {
+    return deployer.deploy(
+      TokenTimelockController,
+      GrapevineToken.address,
+      { from: owner }
+    );
+  }).then(function () {
+    return deployer.deploy(
+      GrapevineCrowdsale,
+      TokenTimelockController.address,
+      rate,
+      wallet,
+      GrapevineToken.address,
+      openingTime,
+      closingTime,
+      softCap,
+      hardCap,
+      { from: owner }
+    );
+  }).then(function () {
+    return (TokenTimelockController.at(TokenTimelockController.address)).setCrowdsale(
+      GrapevineCrowdsale.address,
+      { from: owner }
+    );
+  }).then(function () {
+    return (GrapevineToken.at(GrapevineToken.address)).transferOwnership(
+      GrapevineCrowdsale.address,
+      { from: owner }
+    );
+  }).then(function () {
+    return (GrapevineToken.at(GrapevineToken.address)).totalSupply();
+  }).then(function (totalSupply) {
+    return (GrapevineToken.at(GrapevineToken.address)).transfer(
+      GrapevineCrowdsale.address,
+      totalSupply * saleTokenPercentage,
+      { from: owner }
+    );
+  });
 };
