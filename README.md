@@ -44,9 +44,9 @@ $ geth account new
 3. Get some test ether from https://faucet.rinkeby.io/
 4. Run geth, unlocking the accounts:
 ```sh
-$ geth --rinkeby --rpc --rpcport 8545 --rpcapi db,eth,net,web3,personal --unlock="0,1,2,3"
+$ geth --rinkeby --rpc --rpcport 8545 --rpcapi db,eth,net,web3,personal --unlock="0,1,2"
 ```
-The accounts will be respectively: the owner of the contracts, the crowdsale wallet, the crowdsale tokens holder and a token buyer.
+The accounts will be respectively: the owner of the contracts, the crowdsale wallet and a token buyer.
 
 5. Run the following command to deploy contracts
 ```sh
