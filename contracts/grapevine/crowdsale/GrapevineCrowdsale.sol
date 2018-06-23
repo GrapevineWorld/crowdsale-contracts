@@ -1,9 +1,11 @@
 pragma solidity ^0.4.23;
 
+import "./GrapevineWhitelist.sol";
 import "./TokenTimelockController.sol";
 import "openzeppelin-solidity/contracts/ownership/Whitelist.sol";
 import "openzeppelin-solidity/contracts/crowdsale/distribution/RefundableCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/distribution/PostDeliveryCrowdsale.sol";
+import "openzeppelin-solidity/contracts/crowdsale/validation/WhitelistedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/TimedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/CappedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/token/ERC20/BurnableToken.sol";
@@ -16,8 +18,15 @@ import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
  * @dev Grapevine Crowdsale
  **/
 
-contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, RefundableCrowdsale, Whitelist, PostDeliveryCrowdsale {
+contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, RefundableCrowdsale, PostDeliveryCrowdsale {
+  using SafeMath for uint256;
+
   TokenTimelockController public timelockController;
+  GrapevineWhitelist public authorisedInvestors;
+  GrapevineWhitelist public earlyInvestors;
+
+  mapping(address => uint256) public bonuses;
+
   uint256 deliveryTime;
   uint256 tokensToBeDelivered;
 
@@ -33,6 +42,8 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     */
   constructor(
     TokenTimelockController _timelockController,
+    GrapevineWhitelist _authorisedInvestors,
+    GrapevineWhitelist _earlyInvestors,
     uint256 _rate, 
     address _wallet,
     ERC20 _token, 
@@ -47,9 +58,22 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     public 
     {
     timelockController = _timelockController;
+    authorisedInvestors = _authorisedInvestors;
+    earlyInvestors = _earlyInvestors;
     // token delivery starts 5 days after the crowdsale ends.
     deliveryTime = _closingTime.add(60*60*24*5);
     // deliveryTime = _closingTime.add(60*5);
+  }
+
+  /**
+   * @dev low level token purchase
+   * @param _beneficiary Address performing the token purchase
+   */
+  function buyTokens(address _beneficiary, bytes _whitelistSign) public payable {
+    if (!earlyInvestors.handleOffchainWhitelisted(_beneficiary, _whitelistSign)) {
+      authorisedInvestors.handleOffchainWhitelisted(_beneficiary, _whitelistSign);
+    }
+    super.buyTokens(_beneficiary);
   }
 
   /**
@@ -91,11 +115,13 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
   }
 
   /**
-   * @dev Validation of an incoming purchase. Allowas purchases only when crowdsale is not paused.
+   * @dev Validation of an incoming purchase. Allowas purchases only when crowdsale is not paused and the _beneficiary is authorized to buy.
+   * The early investors went through the KYC process, so they are authorised by default.
    * @param _beneficiary Address performing the token purchase
    * @param _weiAmount Value in wei involved in the purchase
    */
   function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal whenNotPaused {
+    require(authorisedInvestors.whitelist(_beneficiary) || earlyInvestors.whitelist(_beneficiary));
     super._preValidatePurchase(_beneficiary, _weiAmount);
   }
 
@@ -103,10 +129,10 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
    * @dev Computes the bonus. The bonus is
    * - 0 by default
    * - 30% before reaching the softCap for those whitelisted.
-   * - 15% the first 8 days
-   * - 10% the next 8 days
-   * - 8% the next 8 days
-   * - 6% the next 6 days
+   * - 15% the first week
+   * - 10% the second week
+   * - 8% the third week
+   * - 6% the remaining time.
    * @param _time when the purchased happened.
    * @param _beneficiary Address performing the token purchase.
    * @param _value Value in wei involved in the purchase.
@@ -116,16 +142,16 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     _bonus = 0;
     
     // at this level the amount was added to weiRaised
-    if ( (weiRaised.sub(_value) < goal) && whitelist(_beneficiary)) {
+    if ( (weiRaised.sub(_value) < goal) && earlyInvestors.whitelist(_beneficiary) ) {
       _bonus = 30;
     } else {
-      if (_time < openingTime.add(8 days)) {
+      if (_time < openingTime.add(7 days)) {
         _bonus = 15;
-      } else if (_time < openingTime.add(16 days)) {
+      } else if (_time < openingTime.add(14 days)) {
         _bonus = 10;
-      } else if (_time < openingTime.add(24 days)) {
+      } else if (_time < openingTime.add(21 days)) {
         _bonus = 8;
-      } else if (_time < openingTime.add(30 days)) {
+      } else {
         _bonus = 6;
       }
     }

@@ -2,6 +2,13 @@ require('babel-register')({
   ignore: /node_modules\/(?!openzeppelin-solidity\/test\/helpers)/
 });
 require('babel-polyfill');
+
+/*var provider;
+var HDWalletProvider = require('truffle-hdwallet-provider');
+var mnemonic = 'oyster never pudding resource sheriff force behave bone fly mandate winter run';
+
+
+provider = new HDWalletProvider(mnemonic, 'https://ropsten.infura.io/');*/
 module.exports = {
   networks: {
     development: {
@@ -22,11 +29,16 @@ module.exports = {
       network_id: "4",
       gas: 6000000 // Gas limit used for deploys
     },
-    solc: {
-      optimizer: {
-        enabled: true,
-        runs: 200
-      }
+    /*rinkeby: {
+      provider: provider,
+      network_id: "4", // official id of the rinkeby network
+      gas: 6000000 // Gas limit used for deploys
+    },*/
+  },
+  solc: {
+    optimizer: {
+      enabled: true,
+      runs: 200
     }
   }
 };

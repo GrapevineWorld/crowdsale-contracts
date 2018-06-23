@@ -12,11 +12,14 @@ const should = require('chai')
   .use(require('chai-bignumber')(BigNumber))
   .should();
 
+const GrapevineWhitelist = artifacts.require('./GrapevineWhitelist.sol');
 const GrapevineCrowdsale = artifacts.require('./GrapevineCrowdsale.sol');
 const GrapevineToken = artifacts.require('./GrapevineToken.sol');
 const TokenTimelockController = artifacts.require('./TokenTimelockController.sol');
 
 contract('GrapevineCrowdsale', accounts => {
+  let authorisedAddressesWhitelist;
+  let earlyInvestorsWhitelist;
   let grapevineCrowdsale;
   let grapevineToken;
   let tokenTimelockController;
@@ -32,6 +35,7 @@ contract('GrapevineCrowdsale', accounts => {
   var _buyer = accounts[1];
   var _buyer2 = accounts[2];
   var _wallet = accounts[3];
+  var _signer = accounts[2];
 
   const _rate = new BigNumber(1);
   const _hardCap = new BigNumber(web3.toWei('5', 'gwei'));
@@ -57,9 +61,13 @@ contract('GrapevineCrowdsale', accounts => {
     tokenClaimingTime = afterClosingTime + duration.days(5);
 
     grapevineToken = await GrapevineToken.new({ from: _owner });
+    authorisedAddressesWhitelist = await GrapevineWhitelist.new(_signer, { from: _owner });
+    earlyInvestorsWhitelist = await GrapevineWhitelist.new(_signer, { from: _owner });
     tokenTimelockController = await TokenTimelockController.new(grapevineToken.address, { from: _owner });
     grapevineCrowdsale = await GrapevineCrowdsale.new(
       tokenTimelockController.address,
+      authorisedAddressesWhitelist.address,
+      earlyInvestorsWhitelist.address,
       _rate,
       _wallet,
       grapevineToken.address,
@@ -74,6 +82,9 @@ contract('GrapevineCrowdsale', accounts => {
     totalCrowdsaleSupply = new BigNumber(totalSupply * 0.45);
     const crowdsaleAddress = grapevineCrowdsale.address;
     await tokenTimelockController.setCrowdsale(crowdsaleAddress, { from: _owner });
+    await authorisedAddressesWhitelist.setCrowdsale(crowdsaleAddress, { from: _owner });
+    await earlyInvestorsWhitelist.setCrowdsale(crowdsaleAddress, { from: _owner });
+    
     await grapevineToken.transfer(grapevineCrowdsale.address, totalCrowdsaleSupply, { from: _owner });
     await grapevineToken.transferOwnership(crowdsaleAddress, { from: _owner });
   });
@@ -81,6 +92,7 @@ contract('GrapevineCrowdsale', accounts => {
   describe('buying grapes', function () {
     beforeEach(async function () {
       await increaseTimeTo(openingTime);
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
     });
 
     it('should remove funds from buyer', async function () {
@@ -98,6 +110,15 @@ contract('GrapevineCrowdsale', accounts => {
       walletBuyerAfter.should.be.bignumber.equal(expectedBuyerWallet);
     });
 
+    it('should process the off-chain authorization', async function () {
+      await assertRevert(grapevineCrowdsale.sendTransaction(
+        { from: _buyer2, value: _value }));
+
+      const message = authorisedAddressesWhitelist.address.substr(2) + _buyer2.substr(2) + '';
+      let _sign = web3.eth.sign(_signer, web3.sha3(message, { encoding: 'hex' }));
+      await grapevineCrowdsale.buyTokens(_buyer2, _sign, { value: _value }).should.be.fulfilled;
+    });
+
     it('should log purchase', async function () {
       const receipt = await grapevineCrowdsale.sendTransaction(
         { from: _buyer, value: _value });
@@ -107,6 +128,11 @@ contract('GrapevineCrowdsale', accounts => {
       event.args.beneficiary.should.equal(_buyer);
       event.args.value.should.be.bignumber.equal(_value);
       event.args.amount.should.be.bignumber.equal(tokens);
+    });
+
+    it('reverts when trying to buy tokens when buyer is not authorised', async function () {
+      await authorisedAddressesWhitelist.removeAddressFromWhitelist(_buyer, { from: _owner });
+      await assertRevert(grapevineCrowdsale.sendTransaction({ from: _buyer, value: ether(1) }));
     });
 
     it('reverts when trying to buy tokens when contract is paused', async function () {
@@ -149,6 +175,7 @@ contract('GrapevineCrowdsale', accounts => {
 
     it('should have enough tokens to send tokens to ALL investors', async function () {
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer2, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer2, value: _value2 });
       await increaseTimeTo(tokenClaimingTime);
       await grapevineCrowdsale.finalize({ from: _owner });
@@ -165,6 +192,8 @@ contract('GrapevineCrowdsale', accounts => {
       let closingTimeWithNoSufficientTokens = openingTime + duration.days(30);
       let grapevineCrowdsaleWithNoSufficientTokens = await GrapevineCrowdsale.new(
         tokenTimelockController.address,
+        authorisedAddressesWhitelist.address,
+        earlyInvestorsWhitelist.address,
         _rate,
         _wallet,
         grapevineToken.address,
@@ -175,6 +204,7 @@ contract('GrapevineCrowdsale', accounts => {
         { from: _owner }
       );
       await increaseTimeTo(openingTimeWithNoSufficientTokens);
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
       await grapevineToken.transfer(grapevineCrowdsaleWithNoSufficientTokens.address, tokens, { from: _owner });
       await assertRevert(grapevineCrowdsaleWithNoSufficientTokens.sendTransaction({ from: _buyer, value: _value }));
     });
@@ -194,6 +224,8 @@ contract('GrapevineCrowdsale', accounts => {
 
       let grapevineCrowdsaleWithExactlyTheSufficientTokens = await GrapevineCrowdsale.new(
         tokenTimelockControllerWithExactlyTheSufficientTokens.address,
+        authorisedAddressesWhitelist.address,
+        earlyInvestorsWhitelist.address,
         _rate,
         _wallet,
         grapevineTokenWithExactlyTheSufficientTokens.address,
@@ -223,7 +255,7 @@ contract('GrapevineCrowdsale', accounts => {
       );
 
       await increaseTimeTo(openingTimeWithExactlyTheSufficientTokens);
-
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
       await grapevineCrowdsaleWithExactlyTheSufficientTokens.sendTransaction({
         from: _buyer,
         value: _softCap,
@@ -241,10 +273,14 @@ contract('GrapevineCrowdsale', accounts => {
   describe('managing the bonus', function () {
     beforeEach(async function () {
       await increaseTimeTo(openingTime);
+      // to be sure these accounts are able to buy tokens if the test doesn't involve
+      // early investors whitelisting.
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer2, { from: _owner });
     });
 
     it('should create 30% tokenTimelock contract if present in the whitelist', async function () {
-      await grapevineCrowdsale.addAddressToWhitelist(_buyer, { from: _owner });
+      await earlyInvestorsWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.30);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -259,8 +295,23 @@ contract('GrapevineCrowdsale', accounts => {
       bonus.should.bignumber.equal(tokenTimelockDetails[0]);
     });
 
+    it('should create 30% tokenTimelock contract if off-chain early investor', async function () {
+      let countBefore = await tokenTimelockController.getTokenTimelockCount(_buyer2);
+      let bonus = tokens.mul(0.30);
+
+      const message = earlyInvestorsWhitelist.address.substr(2) + _buyer2.substr(2) + '';
+      let _sign = web3.eth.sign(_signer, web3.sha3(message, { encoding: 'hex' }));
+      await grapevineCrowdsale.buyTokens(_buyer2, _sign, { value: _value }).should.be.fulfilled;
+
+      let countAfter = await tokenTimelockController.getTokenTimelockCount(_buyer2);
+      countBefore.should.bignumber.equal(countAfter.sub(1));
+
+      let tokenTimelockDetails = await tokenTimelockController.getTokenTimelockDetails(_buyer2, countAfter.sub(1));
+      bonus.should.bignumber.equal(tokenTimelockDetails[0]);
+    });
+
     it('should create 30% tokenTimelock contract to ALL whitelisted addresses', async function () {
-      await grapevineCrowdsale.addAddressesToWhitelist([_buyer, _buyer2], { from: _owner });
+      await earlyInvestorsWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.30);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -273,6 +324,7 @@ contract('GrapevineCrowdsale', accounts => {
       bonus.should.bignumber.equal(tokenTimelockTokensRemaining);
       bonus.should.bignumber.equal(tokenTimelockDetails[0]);
 
+      await earlyInvestorsWhitelist.addAddressToWhitelist(_buyer2, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer2, value: _value2 });
       let bonus2 = tokens2.mul(0.30);
       remainingBalance = remainingBalance.minus(bonus2);
@@ -288,8 +340,8 @@ contract('GrapevineCrowdsale', accounts => {
     });
 
     it('should create 15% tokenTimelock contract if added and removed from the whitelist', async function () {
-      await grapevineCrowdsale.addAddressToWhitelist(_buyer, { from: _owner });
-      await grapevineCrowdsale.removeAddressFromWhitelist(_buyer, { from: _owner });
+      await earlyInvestorsWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
+      await earlyInvestorsWhitelist.removeAddressFromWhitelist(_buyer, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.15);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -304,11 +356,12 @@ contract('GrapevineCrowdsale', accounts => {
     });
 
     it('should create 15% contract if softcap is reached, even if investor is whitelisted', async function () {
+      await earlyInvestorsWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer2, value: _softCap });
       let buyer2Tokens = _softCap.mul(_rate);
       let buyer2Bonus = buyer2Tokens.mul(0.15);
       let remainingBalance = totalCrowdsaleSupply.minus(buyer2Bonus);
-      await grapevineCrowdsale.addAddressToWhitelist(_buyer, { from: _owner });
+      await earlyInvestorsWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.15);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -338,9 +391,8 @@ contract('GrapevineCrowdsale', accounts => {
       bonus.should.bignumber.equal(tokenTimelockDetails[0]);
     });
 
-    it('should create 10% tokenTimelock contract the next 8 days', async function () {
-      await increaseTimeTo(new BigNumber(openingTime + duration.days(8)).add(1));
-
+    it('should create 10% tokenTimelock contract the second week', async function () {
+      await increaseTimeTo(new BigNumber(openingTime + duration.days(7)).add(1));
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.10);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -354,9 +406,8 @@ contract('GrapevineCrowdsale', accounts => {
       bonus.should.bignumber.equal(tokenTimelockDetails[0]);
     });
 
-    it('should create 8% tokenTimelock contract the next 8 days', async function () {
-      await increaseTimeTo(new BigNumber(openingTime + duration.days(16)).add(1));
-
+    it('should create 8% tokenTimelock contract the third week', async function () {
+      await increaseTimeTo(new BigNumber(openingTime + duration.days(14)).add(1));
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.08);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -370,9 +421,8 @@ contract('GrapevineCrowdsale', accounts => {
       bonus.should.bignumber.equal(tokenTimelockDetails[0]);
     });
 
-    it('should create 6% tokenTimelock contract the next 6 days', async function () {
-      await increaseTimeTo(new BigNumber(openingTime + duration.days(24)).add(1));
-
+    it('should create 6% tokenTimelock contract the remaining time', async function () {
+      await increaseTimeTo(new BigNumber(openingTime + duration.days(21)).add(1));
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _value });
       let bonus = tokens.mul(0.06);
       let tokensRemaining = await grapevineToken.balanceOf(grapevineCrowdsale.address);
@@ -390,6 +440,7 @@ contract('GrapevineCrowdsale', accounts => {
   describe('finalization handling', function () {
     beforeEach(async function () {
       await increaseTimeTo(openingTime);
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
     });
 
     it('should not burn the remaining tokens after finalization if softcap is not reached', async function () {
@@ -424,6 +475,10 @@ contract('GrapevineCrowdsale', accounts => {
   });
   
   describe('softCap handling', function () {
+    beforeEach(async function () {
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
+    });
+
     it('should deny refunds before end', async function () {
       await grapevineCrowdsale.claimRefund({ from: _buyer }).should.be.rejectedWith(EVMRevert);
       await increaseTimeTo(openingTime);
@@ -463,6 +518,7 @@ contract('GrapevineCrowdsale', accounts => {
   describe('hardCap handling', function () {
     beforeEach(async function () {
       await increaseTimeTo(openingTime);
+      await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
     });
 
     describe('accepting payments', function () {

@@ -1,4 +1,5 @@
-const SafeMath = artifacts.require('SafeMath');
+const SafeMath = artifacts.require('SafeMath.sol');
+const GrapevineWhitelist = artifacts.require('GrapevineWhitelist.sol');
 const GrapevineCrowdsale = artifacts.require('GrapevineCrowdsale.sol');
 const GrapevineToken = artifacts.require('GrapevineToken.sol');
 const TokenTimelockController = artifacts.require('TokenTimelockController.sol');
@@ -11,6 +12,12 @@ module.exports = async function (deployer, network, accounts) {
   // wallet where the ehter will get deposited
   const wallet = web3.eth.accounts[2];
   
+  // authorisation signer
+  const authorisationSigner = web3.eth.accounts[3];
+
+  // early investor signer
+  const earlyInvestorSigner = web3.eth.accounts[4];
+  
   const saleTokenPercentage = 0.45;
 
   const rate = new web3.BigNumber(1);
@@ -20,7 +27,7 @@ module.exports = async function (deployer, network, accounts) {
   if (network === 'rinkeby') {
     openingTime = web3.eth.getBlock('latest').timestamp + 300; // five minutes in the future
   } else {
-    openingTime = web3.eth.getBlock('latest').timestamp + 30; // thirty seconds in the future
+    openingTime = web3.eth.getBlock('latest').timestamp + 60; // thirty seconds in the future
   }
 
   const closingTime = openingTime + 86400 * 30; // 30 days
@@ -31,7 +38,8 @@ module.exports = async function (deployer, network, accounts) {
 
   console.log('Owner address: ' + owner);
   console.log('Wallet address: ' + wallet);
-
+  let authorisedAddressesWhitelist;
+  let earlyInvestorsAddressesWhitelist;
   return deployer.then(function () {
     // deploy SafeMath first
     return deployer.deploy(SafeMath);
@@ -54,8 +62,26 @@ module.exports = async function (deployer, network, accounts) {
     );
   }).then(function () {
     return deployer.deploy(
+      GrapevineWhitelist,
+      authorisationSigner,
+      { from: owner }
+    );
+  }).then(function (instance) {
+    authorisedAddressesWhitelist = instance;
+  }).then(function () {
+    return deployer.deploy(
+      GrapevineWhitelist,
+      earlyInvestorSigner,
+      { from: owner }
+    );
+  }).then(function (instance) {
+    earlyInvestorsAddressesWhitelist = instance;
+  }).then(function () {
+    return deployer.deploy(
       GrapevineCrowdsale,
       TokenTimelockController.address,
+      authorisedAddressesWhitelist.address,
+      earlyInvestorsAddressesWhitelist.address,
       rate,
       wallet,
       GrapevineToken.address,
@@ -67,6 +93,16 @@ module.exports = async function (deployer, network, accounts) {
     );
   }).then(function () {
     return (TokenTimelockController.at(TokenTimelockController.address)).setCrowdsale(
+      GrapevineCrowdsale.address,
+      { from: owner }
+    );
+  }).then(function () {
+    return authorisedAddressesWhitelist.setCrowdsale(
+      GrapevineCrowdsale.address,
+      { from: owner }
+    );
+  }).then(function () {
+    return earlyInvestorsAddressesWhitelist.setCrowdsale(
       GrapevineCrowdsale.address,
       { from: owner }
     );
