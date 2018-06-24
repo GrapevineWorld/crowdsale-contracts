@@ -50,7 +50,6 @@ contract TokenTimelockController is Ownable {
   ERC20 public token;
   address public crowdsale;
   bool public activated;
-  bool public crowdsaleEnded;
 
   /// @notice Constructor for TokenTimelock Controller
   constructor(ERC20 _token) public {
@@ -81,14 +80,6 @@ contract TokenTimelockController is Ownable {
   function setCrowdsale(address _crowdsale) external onlyOwner {
     require(_crowdsale != address(0));
     crowdsale = _crowdsale;
-  }
-
-  /**
-   * @dev Function to set that the crowdsale has ended.
-   * It can be called only by the crowdsale address.
-   */
-  function setCrowdsaleEnded() external onlyCrowdsale {
-    crowdsaleEnded = true;
   }
 
   /**
@@ -207,7 +198,11 @@ contract TokenTimelockController is Ownable {
    * @param _beneficiary Address owning the lock.
    * @param _id id of the lock.
    */
-  function revokeTokenTimelock(address _beneficiary, uint256 _id) external onlyWhenActivated onlyOwner onlyValidTokenTimelock(_beneficiary, _id) {
+  function revokeTokenTimelock(
+    address _beneficiary,
+    uint256 _id) 
+    external onlyWhenActivated onlyOwner onlyValidTokenTimelock(_beneficiary, _id)
+  {
     require(tokenTimeLocks[_beneficiary][_id].revocable);
     require(!tokenTimeLocks[_beneficiary][_id].released);
     TokenTimelock storage tokenLock = tokenTimeLocks[_beneficiary][_id];
@@ -296,14 +291,5 @@ contract TokenTimelockController is Ownable {
     tokenLock.released = true;
     require(token.transfer(_beneficiary, tokenLock.amount));
     emit TokenTimelockReleased(_beneficiary, tokenLock.amount);
-  }
-
- /**
-  withdraw the tokens ONLY if the crowdsale has ended and didn't reach the goal.
-  */
-  function withdrawTokens() external {
-    require(crowdsaleEnded);
-    require(!activated);
-    token.transfer(owner, token.balanceOf(this));
   }
 }

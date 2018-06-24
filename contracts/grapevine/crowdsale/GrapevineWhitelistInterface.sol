@@ -1,10 +1,10 @@
 pragma solidity ^0.4.23;
 
+
 /**
  * @title Grapevine Whitelist extends the zeppelin Whitelist and adding off-chain signing capabilities.
  * @dev Grapevine Crowdsale
  **/
-
 contract GrapevineWhitelistInterface {
 
   /**
@@ -13,6 +13,7 @@ contract GrapevineWhitelistInterface {
    */
   function whitelist(address _address) view external returns (bool);
 
+ 
   /**
    * @dev Handles the off-chain whitelisting.
    * @param _addr Address of the sender.

@@ -1,16 +1,11 @@
 pragma solidity ^0.4.23;
 
+
 /**
  * @title TokenTimelock Controller Interface
  * @dev This contract allows the crowdsale to create locked bonuses and activate the controller.
  **/
 contract TokenTimelockControllerInterface {
-
-  /**
-   * @dev Function to set that the crowdsale has ended.
-   * It can be called only by the crowdsale address.
-   */
-  function setCrowdsaleEnded() external;
 
   /**
    * @dev Function to activate the controller.

@@ -51,12 +51,6 @@ contract('TokenTimelockController', accounts => {
       crowdsale.should.equal(crowdsaleSet);
     });
 
-    it('set the crowdsale ended!', async function () {
-      await this.tokenTimelockController.setCrowdsaleEnded({ from: crowdsale });
-      let crowdsaleEnded = await this.tokenTimelockController.crowdsaleEnded();
-      true.should.equal(crowdsaleEnded);
-    });
-
     it('set controller active', async function () {
       await this.tokenTimelockController.activate({ from: crowdsale });
       let activated = await this.tokenTimelockController.activated();
@@ -73,10 +67,6 @@ contract('TokenTimelockController', accounts => {
 
     it('reverts the activate if the sender is not the crowdsale!', async function () {
       await assertRevert(this.tokenTimelockController.activate({ from: owner }));
-    });
-
-    it('reverts the setCrowdsaleEnded if the sender is not the crowdsale!', async function () {
-      await assertRevert(this.tokenTimelockController.setCrowdsaleEnded({ from: owner }));
     });
   });
 
@@ -341,7 +331,7 @@ contract('TokenTimelockController', accounts => {
     it('should fail to be revoked a second time', async function () {
       await this.tokenTimelockController.activate({ from: crowdsale });
       await this.tokenTimelockController.revokeTokenTimelock(beneficiary, 0, { from: owner });
-      await this.tokenTimelockController.revokeTokenTimelock(beneficiary, 0, { rom: owner })
+      await this.tokenTimelockController.revokeTokenTimelock(beneficiary, 0, { from: owner })
         .should.be.rejectedWith(EVMRevert);
     });
     
@@ -460,38 +450,6 @@ contract('TokenTimelockController', accounts => {
       await this.tokenTimelockController.release(0, { from: beneficiary }).should.be.rejected;
       const balance = await this.token.balanceOf(beneficiary);
       balance.should.be.bignumber.equal(amount.div(2));
-    });
-  });
-
-  describe('claming the Controller tokens', function () {
-    beforeEach(async function () {
-      await this.token.approve(this.tokenTimelockController.address, amount, { from: owner });
-      await this.tokenTimelockController.createTeamTokenTimeLock(
-        beneficiary,
-        amount,
-        this.start,
-        owner,
-        { from: owner }
-      );
-    });
-
-    it('cannot be claimed before crowdsale ends', async function () {
-      await this.tokenTimelockController.withdrawTokens({ from: owner }).should.be.rejected;
-    });
-
-    it('cannot be released if the controller is activated', async function () {
-      await this.tokenTimelockController.setCrowdsaleEnded({ from: crowdsale });
-      await this.tokenTimelockController.activate({ from: crowdsale });
-      await this.tokenTimelockController.withdrawTokens({ from: owner }).should.be.rejected;
-    });
-
-    it('can be released if the controller is not activated', async function () {
-      await this.tokenTimelockController.setCrowdsaleEnded({ from: crowdsale });
-      let balanceBefore = await this.token.balanceOf(owner);
-      await this.tokenTimelockController.withdrawTokens({ from: owner });
-      let balanceAfter = await this.token.balanceOf(owner);
-      const balance = balanceAfter.sub(balanceBefore);
-      amount.should.bignumber.equal(balance);
     });
   });
 });

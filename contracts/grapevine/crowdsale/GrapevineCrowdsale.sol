@@ -69,6 +69,7 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
    * @param _beneficiary Address performing the token purchase
    */
   function buyTokens(address _beneficiary, bytes _whitelistSign) public payable {
+    // since the earlyInvestors are by definition autorised, we check first the earlyInvestors.
     if (!earlyInvestors.handleOffchainWhitelisted(_beneficiary, _whitelistSign)) {
       authorisedInvestors.handleOffchainWhitelisted(_beneficiary, _whitelistSign);
     }
@@ -83,6 +84,19 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     // solium-disable-next-line security/no-block-members
     require(block.timestamp > deliveryTime);
     super.withdrawTokens();
+    uint256 _bonusTokens = bonuses[msg.sender];
+    if (_bonusTokens > 0) {
+      bonuses[msg.sender] = 0;
+      require(token.approve(address(timelockController), _bonusTokens));
+      require(
+        timelockController.createInvestorTokenTimeLock(
+          msg.sender,
+          _bonusTokens,
+          deliveryTime,
+          this
+        )
+      );
+    }
   }
 
   /**
@@ -92,24 +106,18 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
    * @param _tokenAmount Number of tokens to be purchased
    */
   function _processPurchase( address _beneficiary, uint256 _tokenAmount ) internal {
-    tokensToBeDelivered = tokensToBeDelivered.add(_tokenAmount);
+    uint256 _totalTokens = _tokenAmount;
     // solium-disable-next-line security/no-block-members
     uint256 _bonus = getBonus(block.timestamp, _beneficiary, msg.value);
-    uint256 _bonusTokens = _tokenAmount.mul(_bonus).div(100);
-    // make sure the crowdsale contract has enough tokens to transfer the tokens and to create the timelock contract.
-    uint256 _currentBalance = token.balanceOf(this);
-    require(_currentBalance >= tokensToBeDelivered.add(_bonusTokens));
     if (_bonus>0) {
-      require(token.approve(address(timelockController), _bonusTokens));
-      require(
-        timelockController.createInvestorTokenTimeLock(
-          _beneficiary,
-          _bonusTokens,
-          deliveryTime,
-          this
-        )
-      );
+      uint256 _bonusTokens = _tokenAmount.mul(_bonus).div(100);
+      // make sure the crowdsale contract has enough tokens to transfer the purchased tokens and to create the timelock bonus.
+      uint256 _currentBalance = token.balanceOf(this);
+      require(_currentBalance >= _totalTokens.add(_bonusTokens));
+      bonuses[_beneficiary] = bonuses[_beneficiary].add(_bonusTokens);
+      _totalTokens = _totalTokens.add(_bonusTokens);
     }
+    tokensToBeDelivered = tokensToBeDelivered.add(_totalTokens);
     super._processPurchase(_beneficiary, _tokenAmount);
   }
 
@@ -160,12 +168,10 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
   /**
    * @dev Performs the finalization tasks:
    * - if goal reached, activate the controller and burn the remaining tokens
-   * - transfer the ownershoip of the token contract back to the owner.
+   * - transfer the ownership of the token contract back to the owner.
    */
   function finalization() internal {
-    // notify the controller that the crowdsale ended.
-    timelockController.setCrowdsaleEnded();
-    // only when the goal is reached we burn the tokens.
+    // only when the goal is reached we burn the tokens and activate the controller.
     if (goalReached()) {
       // activate the controller to enable the investors and team members 
       // to claim their tokens when the time comes.

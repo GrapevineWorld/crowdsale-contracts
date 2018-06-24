@@ -8,7 +8,6 @@ import "openzeppelin-solidity/contracts/access/SignatureBouncer.sol";
  * @title Grapevine Whitelist extends the zeppelin Whitelist and adding off-chain signing capabilities.
  * @dev Grapevine Crowdsale
  **/
-
 contract GrapevineWhitelist is SignatureBouncer, GrapevineWhitelistInterface {
 
   event WhitelistedAddressAdded(address addr);
@@ -36,7 +35,6 @@ contract GrapevineWhitelist is SignatureBouncer, GrapevineWhitelistInterface {
   function whitelist(address _address) view external returns (bool) {
     return whitelist[_address];
   }
-
   
   /**
    * @dev Function to set the crowdsale address
@@ -45,15 +43,6 @@ contract GrapevineWhitelist is SignatureBouncer, GrapevineWhitelistInterface {
   function setCrowdsale(address _crowdsale) external onlyOwner {
     require(_crowdsale != address(0));
     crowdsale = _crowdsale;
-  }
-
-  /**
-   * @dev Adds single address to whitelist.
-   * @param _beneficiary Address to be added to the whitelist
-   */
-  function addAddressToWhitelist(address _beneficiary) public onlyOwnerOrCrowdsale {
-    whitelist[_beneficiary] = true;
-    emit WhitelistedAddressAdded(_beneficiary);
   }
 
   /**
@@ -93,5 +82,14 @@ contract GrapevineWhitelist is SignatureBouncer, GrapevineWhitelistInterface {
       }
     }
     return valid;
+  }
+
+  /**
+   * @dev Adds single address to whitelist.
+   * @param _beneficiary Address to be added to the whitelist
+   */
+  function addAddressToWhitelist(address _beneficiary) public onlyOwnerOrCrowdsale {
+    whitelist[_beneficiary] = true;
+    emit WhitelistedAddressAdded(_beneficiary);
   }
 }
