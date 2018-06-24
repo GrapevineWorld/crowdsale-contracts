@@ -195,7 +195,6 @@ contract TokenTimelockController is Ownable {
   ERC20 public token;
   address public crowdsale;
   bool public activated;
-  bool public crowdsaleEnded;
 
   /// @notice Constructor for TokenTimelock Controller
   constructor(ERC20 _token) public {
@@ -223,24 +222,16 @@ contract TokenTimelockController is Ownable {
    * @dev Function to set the crowdsale address
    * @param _crowdsale address The address of the crowdsale.
    */
-  function setCrowdsale(address _crowdsale) public onlyOwner {
+  function setCrowdsale(address _crowdsale) external onlyOwner {
     require(_crowdsale != address(0));
     crowdsale = _crowdsale;
-  }
-
-  /**
-   * @dev Function to set that the crowdsale has ended.
-   * It can be called only by the crowdsale address.
-   */
-  function setCrowdsaleEnded() public onlyCrowdsale {
-    crowdsaleEnded = true;
   }
 
   /**
    * @dev Function to activate the controller.
    * It can be called only by the crowdsale address.
    */
-  function activate() public onlyCrowdsale {
+  function activate() external onlyCrowdsale {
     activated = true;
   }
 
@@ -261,7 +252,7 @@ contract TokenTimelockController is Ownable {
     uint256 _amount, 
     uint256 _start,
     address _tokenHolder
-  ) public onlyCrowdsale returns (bool)
+  ) external onlyCrowdsale returns (bool)
     {
     require(_beneficiary != address(0) && _amount > 0);
     require(_tokenHolder != address(0));
@@ -301,7 +292,7 @@ contract TokenTimelockController is Ownable {
     uint256 _amount, 
     uint256 _start,
     address _tokenHolder
-  ) public onlyOwner returns (bool)
+  ) external onlyOwner returns (bool)
     {
     require(_beneficiary != address(0) && _amount > 0);
     require(_tokenHolder != address(0));
@@ -352,7 +343,11 @@ contract TokenTimelockController is Ownable {
    * @param _beneficiary Address owning the lock.
    * @param _id id of the lock.
    */
-  function revokeTokenTimelock(address _beneficiary, uint256 _id) public onlyWhenActivated onlyOwner onlyValidTokenTimelock(_beneficiary, _id) {
+  function revokeTokenTimelock(
+    address _beneficiary,
+    uint256 _id) 
+    external onlyWhenActivated onlyOwner onlyValidTokenTimelock(_beneficiary, _id)
+  {
     require(tokenTimeLocks[_beneficiary][_id].revocable);
     require(!tokenTimeLocks[_beneficiary][_id].released);
     TokenTimelock storage tokenLock = tokenTimeLocks[_beneficiary][_id];
@@ -365,7 +360,7 @@ contract TokenTimelockController is Ownable {
    * @dev Returns the number locks of the provided _beneficiary.
    * @param _beneficiary Address owning the locks.
    */
-  function getTokenTimelockCount(address _beneficiary) view public returns (uint) {
+  function getTokenTimelockCount(address _beneficiary) view external returns (uint) {
     return tokenTimeLocks[_beneficiary].length;
   }
 
@@ -374,7 +369,7 @@ contract TokenTimelockController is Ownable {
    * @param _beneficiary Address owning the lock.
    * @param _id id of the lock.
    */
-  function getTokenTimelockDetails(address _beneficiary, uint256 _id) view public returns (
+  function getTokenTimelockDetails(address _beneficiary, uint256 _id) view external returns (
     uint256 _amount,
     uint256 _releaseTime,
     bool _released,
@@ -398,7 +393,7 @@ contract TokenTimelockController is Ownable {
    * @param _id id of the lock.
    * @param _newBeneficiary Address of the new beneficiary.
    */
-  function changeBeneficiary(uint256 _id, address _newBeneficiary) public onlyWhenActivated onlyValidTokenTimelock(msg.sender, _id) {
+  function changeBeneficiary(uint256 _id, address _newBeneficiary) external onlyWhenActivated onlyValidTokenTimelock(msg.sender, _id) {
     tokenTimeLocks[_newBeneficiary].push(tokenTimeLocks[msg.sender][_id]);
     if (tokenTimeLocks[msg.sender].length > 1) {
       tokenTimeLocks[msg.sender][_id] = tokenTimeLocks[msg.sender][tokenTimeLocks[msg.sender].length.sub(1)];
@@ -418,7 +413,7 @@ contract TokenTimelockController is Ownable {
    * - the lock period has passed.
    * @param _id id of the lock.
    */
-  function release(uint256 _id) public {
+  function release(uint256 _id) external {
     releaseFor(msg.sender, _id);
   }
 
@@ -441,14 +436,5 @@ contract TokenTimelockController is Ownable {
     tokenLock.released = true;
     require(token.transfer(_beneficiary, tokenLock.amount));
     emit TokenTimelockReleased(_beneficiary, tokenLock.amount);
-  }
-
- /**
-  withdraw the tokens ONLY if the crowdsale has ended and didn't reach the goal.
-  */
-  function withdrawTokens() public {
-    require(crowdsaleEnded);
-    require(!activated);
-    token.transfer(owner, token.balanceOf(this));
   }
 }

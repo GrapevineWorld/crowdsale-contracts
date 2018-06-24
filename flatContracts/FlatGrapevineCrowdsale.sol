@@ -1,5 +1,77 @@
 pragma solidity ^0.4.23;
 
+// File: contracts/grapevine/crowdsale/BurnableTokenInterface.sol
+
+/**
+ * @title Burnable Token Interface, defining one single function to burn tokens.
+ * @dev Grapevine Crowdsale
+ **/
+contract BurnableTokenInterface {
+
+  /**
+  * @dev Burns a specific amount of tokens.
+  * @param _value The amount of token to be burned.
+  */
+  function burn(uint256 _value) public;
+}
+
+// File: contracts/grapevine/crowdsale/GrapevineWhitelistInterface.sol
+
+/**
+ * @title Grapevine Whitelist extends the zeppelin Whitelist and adding off-chain signing capabilities.
+ * @dev Grapevine Crowdsale
+ **/
+contract GrapevineWhitelistInterface {
+
+  /**
+   * @dev Function to check if an address is whitelisted or not
+   * @param _address address The address to be checked.
+   */
+  function whitelist(address _address) view external returns (bool);
+
+ 
+  /**
+   * @dev Handles the off-chain whitelisting.
+   * @param _addr Address of the sender.
+   * @param _sig signed message provided by the sender.
+   */
+  function handleOffchainWhitelisted(address _addr, bytes _sig) external returns (bool);
+}
+
+// File: contracts/grapevine/crowdsale/TokenTimelockControllerInterface.sol
+
+/**
+ * @title TokenTimelock Controller Interface
+ * @dev This contract allows the crowdsale to create locked bonuses and activate the controller.
+ **/
+contract TokenTimelockControllerInterface {
+
+  /**
+   * @dev Function to activate the controller.
+   * It can be called only by the crowdsale address.
+   */
+  function activate() external;
+
+  /**
+   * @dev Creates a lock for the provided _beneficiary with the provided amount
+   * The creation can be peformed only if:
+   * - the sender is the address of the crowdsale;
+   * - the _beneficiary and _tokenHolder are valid addresses;
+   * - the _amount is greater than 0 and was appoved by the _tokenHolder prior to the transaction.
+   * The investors will have a lock with a lock period of 6 months.
+   * @param _beneficiary Address that will own the lock.
+   * @param _amount the amount of the locked tokens.
+   * @param _start when the lock should start.
+   * @param _tokenHolder the account that approved the amount for this contract.
+   */
+  function createInvestorTokenTimeLock(
+    address _beneficiary,
+    uint256 _amount, 
+    uint256 _start,
+    address _tokenHolder
+    ) external returns (bool);
+}
+
 // File: openzeppelin-solidity/contracts/math/SafeMath.sol
 
 /**
@@ -52,67 +124,6 @@ library SafeMath {
   }
 }
 
-// File: openzeppelin-solidity/contracts/ownership/Ownable.sol
-
-/**
- * @title Ownable
- * @dev The Ownable contract has an owner address, and provides basic authorization control
- * functions, this simplifies the implementation of "user permissions".
- */
-contract Ownable {
-  address public owner;
-
-
-  event OwnershipRenounced(address indexed previousOwner);
-  event OwnershipTransferred(
-    address indexed previousOwner,
-    address indexed newOwner
-  );
-
-
-  /**
-   * @dev The Ownable constructor sets the original `owner` of the contract to the sender
-   * account.
-   */
-  constructor() public {
-    owner = msg.sender;
-  }
-
-  /**
-   * @dev Throws if called by any account other than the owner.
-   */
-  modifier onlyOwner() {
-    require(msg.sender == owner);
-    _;
-  }
-
-  /**
-   * @dev Allows the current owner to relinquish control of the contract.
-   */
-  function renounceOwnership() public onlyOwner {
-    emit OwnershipRenounced(owner);
-    owner = address(0);
-  }
-
-  /**
-   * @dev Allows the current owner to transfer control of the contract to a newOwner.
-   * @param _newOwner The address to transfer ownership to.
-   */
-  function transferOwnership(address _newOwner) public onlyOwner {
-    _transferOwnership(_newOwner);
-  }
-
-  /**
-   * @dev Transfers control of the contract to a newOwner.
-   * @param _newOwner The address to transfer ownership to.
-   */
-  function _transferOwnership(address _newOwner) internal {
-    require(_newOwner != address(0));
-    emit OwnershipTransferred(owner, _newOwner);
-    owner = _newOwner;
-  }
-}
-
 // File: openzeppelin-solidity/contracts/token/ERC20/ERC20Basic.sol
 
 /**
@@ -146,311 +157,6 @@ contract ERC20 is ERC20Basic {
     address indexed spender,
     uint256 value
   );
-}
-
-// File: contracts/grapevine/crowdsale/TokenTimelockController.sol
-
-/**
- * @title TokenTimelock Controller
- * @dev This contract allows to create/read/revoke TokenTimelock contracts and to claim the amounts vested.
- **/
-contract TokenTimelockController is Ownable {
-  using SafeMath for uint;
-
-  struct TokenTimelock {
-    uint256 amount;
-    uint256 releaseTime;
-    bool released;
-    bool revocable;
-    bool revoked;
-  }
-
-  event TokenTimelockCreated(
-    address indexed beneficiary, 
-    uint256 releaseTime, 
-    bool revocable, 
-    uint256 amount
-  );
-
-  event TokenTimelockRevoked(
-    address indexed beneficiary
-  );
-
-  event TokenTimelockBeneficiaryChanged(
-    address indexed previousBeneficiary, 
-    address indexed newBeneficiary
-  );
-  
-  event TokenTimelockReleased(
-    address indexed beneficiary,
-    uint256 amount
-  );
-
-  uint256 public constant TEAM_LOCK_DURATION_PART1 = 1 * 365 days;
-  uint256 public constant TEAM_LOCK_DURATION_PART2 = 2 * 365 days;
-  uint256 public constant INVESTOR_LOCK_DURATION = 6 * 30 days;
-
-  mapping (address => TokenTimelock[]) tokenTimeLocks;
-  
-  ERC20 public token;
-  address public crowdsale;
-  bool public activated;
-  bool public crowdsaleEnded;
-
-  /// @notice Constructor for TokenTimelock Controller
-  constructor(ERC20 _token) public {
-    token = _token;
-  }
-
-  modifier onlyCrowdsale() {
-    require(msg.sender == crowdsale);
-    _;
-  }
-  
-  modifier onlyWhenActivated() {
-    require(activated);
-    _;
-  }
-
-  modifier onlyValidTokenTimelock(address _beneficiary, uint256 _id) {
-    require(_beneficiary != address(0));
-    require(_id < tokenTimeLocks[_beneficiary].length);
-    require(!tokenTimeLocks[_beneficiary][_id].revoked);
-    _;
-  }
-
-  /**
-   * @dev Function to set the crowdsale address
-   * @param _crowdsale address The address of the crowdsale.
-   */
-  function setCrowdsale(address _crowdsale) public onlyOwner {
-    require(_crowdsale != address(0));
-    crowdsale = _crowdsale;
-  }
-
-  /**
-   * @dev Function to set that the crowdsale has ended.
-   * It can be called only by the crowdsale address.
-   */
-  function setCrowdsaleEnded() public onlyCrowdsale {
-    crowdsaleEnded = true;
-  }
-
-  /**
-   * @dev Function to activate the controller.
-   * It can be called only by the crowdsale address.
-   */
-  function activate() public onlyCrowdsale {
-    activated = true;
-  }
-
-  /**
-   * @dev Creates a lock for the provided _beneficiary with the provided amount
-   * The creation can be peformed only if:
-   * - the sender is the address of the crowdsale;
-   * - the _beneficiary and _tokenHolder are valid addresses;
-   * - the _amount is greater than 0 and was appoved by the _tokenHolder prior to the transaction.
-   * The investors will have a lock with a lock period of 6 months.
-   * @param _beneficiary Address that will own the lock.
-   * @param _amount the amount of the locked tokens.
-   * @param _start when the lock should start.
-   * @param _tokenHolder the account that approved the amount for this contract.
-   */
-  function createInvestorTokenTimeLock(
-    address _beneficiary,
-    uint256 _amount, 
-    uint256 _start,
-    address _tokenHolder
-  ) public onlyCrowdsale returns (bool)
-    {
-    require(_beneficiary != address(0) && _amount > 0);
-    require(_tokenHolder != address(0));
-
-    TokenTimelock memory tokenLock = TokenTimelock(
-      _amount,
-      _start.add(INVESTOR_LOCK_DURATION),
-      false,
-      false,
-      false
-    );
-    tokenTimeLocks[_beneficiary].push(tokenLock);
-    require(token.transferFrom(_tokenHolder, this, _amount));
-    
-    emit TokenTimelockCreated(
-      _beneficiary,
-      tokenLock.releaseTime,
-      false,
-      _amount);
-    return true;
-  }
-
-  /**
-   * @dev Creates locks for the provided _beneficiary with the provided amount
-   * The creation can be peformed only if:
-   * - the sender is the owner of the contract;
-   * - the _beneficiary and _tokenHolder are valid addresses;
-   * - the _amount is greater than 0 and was appoved by the _tokenHolder prior to the transaction.
-   * The team members will have two locks with 1 and 2 years lock period, each having half of the amount.
-   * @param _beneficiary Address that will own the lock.
-   * @param _amount the amount of the locked tokens.
-   * @param _start when the lock should start.
-   * @param _tokenHolder the account that approved the amount for this contract.
-   */
-  function createTeamTokenTimeLock(
-    address _beneficiary,
-    uint256 _amount, 
-    uint256 _start,
-    address _tokenHolder
-  ) public onlyOwner returns (bool)
-    {
-    require(_beneficiary != address(0) && _amount > 0);
-    require(_tokenHolder != address(0));
-
-    uint256 amount = _amount.div(2);
-    TokenTimelock memory tokenLock1 = TokenTimelock(
-      amount,
-      _start.add(TEAM_LOCK_DURATION_PART1),
-      false,
-      true,
-      false
-    );
-    tokenTimeLocks[_beneficiary].push(tokenLock1);
-
-    TokenTimelock memory tokenLock2 = TokenTimelock(
-      amount,
-      _start.add(TEAM_LOCK_DURATION_PART2),
-      false,
-      true,
-      false
-    );
-    tokenTimeLocks[_beneficiary].push(tokenLock2);
-
-    require(token.transferFrom(_tokenHolder, this, _amount));
-    
-    emit TokenTimelockCreated(
-      _beneficiary,
-      tokenLock1.releaseTime,
-      true,
-      amount);
-    emit TokenTimelockCreated(
-      _beneficiary,
-      tokenLock2.releaseTime,
-      true,
-      amount);
-    return true;
-  }
-
-  /**
-   * @dev Revokes the lock for the provided _beneficiary and _id.
-   * The revoke can be peformed only if:
-   * - the sender is the owner of the contract;
-   * - the controller was activated by the crowdsale contract;
-   * - the _beneficiary and _id reference a valid lock;
-   * - the lock was not revoked;
-   * - the lock is revokable;
-   * - the lock was not released.
-   * @param _beneficiary Address owning the lock.
-   * @param _id id of the lock.
-   */
-  function revokeTokenTimelock(address _beneficiary, uint256 _id) public onlyWhenActivated onlyOwner onlyValidTokenTimelock(_beneficiary, _id) {
-    require(tokenTimeLocks[_beneficiary][_id].revocable);
-    require(!tokenTimeLocks[_beneficiary][_id].released);
-    TokenTimelock storage tokenLock = tokenTimeLocks[_beneficiary][_id];
-    tokenLock.revoked = true;
-    require(token.transfer(owner, tokenLock.amount));
-    emit TokenTimelockRevoked(_beneficiary);
-  }
-
-  /**
-   * @dev Returns the number locks of the provided _beneficiary.
-   * @param _beneficiary Address owning the locks.
-   */
-  function getTokenTimelockCount(address _beneficiary) view public returns (uint) {
-    return tokenTimeLocks[_beneficiary].length;
-  }
-
-  /**
-   * @dev Returns the details of the lock referenced by the provided _beneficiary and _id.
-   * @param _beneficiary Address owning the lock.
-   * @param _id id of the lock.
-   */
-  function getTokenTimelockDetails(address _beneficiary, uint256 _id) view public returns (
-    uint256 _amount,
-    uint256 _releaseTime,
-    bool _released,
-    bool _revocable,
-    bool _revoked) 
-    {
-    require(_id < tokenTimeLocks[_beneficiary].length);
-    _amount = tokenTimeLocks[_beneficiary][_id].amount;
-    _releaseTime = tokenTimeLocks[_beneficiary][_id].releaseTime;
-    _released = tokenTimeLocks[_beneficiary][_id].released;
-    _revocable = tokenTimeLocks[_beneficiary][_id].revocable;
-    _revoked = tokenTimeLocks[_beneficiary][_id].revoked;
-  }
-
-  /**
-   * @dev Changes the beneficiary of the _id'th lock of the sender with the provided newBeneficiary.
-   * The release can be peformed only if:
-   * - the controller was activated by the crowdsale contract;
-   * - the sender and _id reference a valid lock;
-   * - the lock was not revoked;
-   * @param _id id of the lock.
-   * @param _newBeneficiary Address of the new beneficiary.
-   */
-  function changeBeneficiary(uint256 _id, address _newBeneficiary) public onlyWhenActivated onlyValidTokenTimelock(msg.sender, _id) {
-    tokenTimeLocks[_newBeneficiary].push(tokenTimeLocks[msg.sender][_id]);
-    if (tokenTimeLocks[msg.sender].length > 1) {
-      tokenTimeLocks[msg.sender][_id] = tokenTimeLocks[msg.sender][tokenTimeLocks[msg.sender].length.sub(1)];
-      delete(tokenTimeLocks[msg.sender][tokenTimeLocks[msg.sender].length.sub(1)]);
-    }
-    tokenTimeLocks[msg.sender].length--;
-    emit TokenTimelockBeneficiaryChanged(msg.sender, _newBeneficiary);
-  }
-
-  /**
-   * @dev Releases the tokens for the calling sender and _id.
-   * The release can be peformed only if:
-   * - the controller was activated by the crowdsale contract;
-   * - the sender and _id reference a valid lock;
-   * - the lock was not revoked;
-   * - the lock was not released before;
-   * - the lock period has passed.
-   * @param _id id of the lock.
-   */
-  function release(uint256 _id) public {
-    releaseFor(msg.sender, _id);
-  }
-
-   /**
-   * @dev Releases the tokens for the provided _beneficiary and _id.
-   * The release can be peformed only if:
-   * - the controller was activated by the crowdsale contract;
-   * - the _beneficiary and _id reference a valid lock;
-   * - the lock was not revoked;
-   * - the lock was not released before;
-   * - the lock period has passed.
-   * @param _beneficiary Address owning the lock.
-   * @param _id id of the lock.
-   */
-  function releaseFor(address _beneficiary, uint256 _id) public onlyWhenActivated onlyValidTokenTimelock(_beneficiary, _id) {
-    TokenTimelock storage tokenLock = tokenTimeLocks[_beneficiary][_id];
-    require(!tokenLock.released);
-    // solium-disable-next-line security/no-block-members
-    require(block.timestamp >= tokenLock.releaseTime);
-    tokenLock.released = true;
-    require(token.transfer(_beneficiary, tokenLock.amount));
-    emit TokenTimelockReleased(_beneficiary, tokenLock.amount);
-  }
-
- /**
-  withdraw the tokens ONLY if the crowdsale has ended and didn't reach the goal.
-  */
-  function withdrawTokens() public {
-    require(crowdsaleEnded);
-    require(!activated);
-    token.transfer(owner, token.balanceOf(this));
-  }
 }
 
 // File: openzeppelin-solidity/contracts/crowdsale/Crowdsale.sol
@@ -747,6 +453,67 @@ contract PostDeliveryCrowdsale is TimedCrowdsale {
 
 }
 
+// File: openzeppelin-solidity/contracts/ownership/Ownable.sol
+
+/**
+ * @title Ownable
+ * @dev The Ownable contract has an owner address, and provides basic authorization control
+ * functions, this simplifies the implementation of "user permissions".
+ */
+contract Ownable {
+  address public owner;
+
+
+  event OwnershipRenounced(address indexed previousOwner);
+  event OwnershipTransferred(
+    address indexed previousOwner,
+    address indexed newOwner
+  );
+
+
+  /**
+   * @dev The Ownable constructor sets the original `owner` of the contract to the sender
+   * account.
+   */
+  constructor() public {
+    owner = msg.sender;
+  }
+
+  /**
+   * @dev Throws if called by any account other than the owner.
+   */
+  modifier onlyOwner() {
+    require(msg.sender == owner);
+    _;
+  }
+
+  /**
+   * @dev Allows the current owner to relinquish control of the contract.
+   */
+  function renounceOwnership() public onlyOwner {
+    emit OwnershipRenounced(owner);
+    owner = address(0);
+  }
+
+  /**
+   * @dev Allows the current owner to transfer control of the contract to a newOwner.
+   * @param _newOwner The address to transfer ownership to.
+   */
+  function transferOwnership(address _newOwner) public onlyOwner {
+    _transferOwnership(_newOwner);
+  }
+
+  /**
+   * @dev Transfers control of the contract to a newOwner.
+   * @param _newOwner The address to transfer ownership to.
+   */
+  function _transferOwnership(address _newOwner) internal {
+    require(_newOwner != address(0));
+    emit OwnershipTransferred(owner, _newOwner);
+    owner = _newOwner;
+  }
+}
+
 // File: openzeppelin-solidity/contracts/crowdsale/distribution/FinalizableCrowdsale.sol
 
 /**
@@ -1006,334 +773,6 @@ contract Pausable is Ownable {
   }
 }
 
-// File: openzeppelin-solidity/contracts/ownership/rbac/Roles.sol
-
-/**
- * @title Roles
- * @author Francisco Giordano (@frangio)
- * @dev Library for managing addresses assigned to a Role.
- *      See RBAC.sol for example usage.
- */
-library Roles {
-  struct Role {
-    mapping (address => bool) bearer;
-  }
-
-  /**
-   * @dev give an address access to this role
-   */
-  function add(Role storage role, address addr)
-    internal
-  {
-    role.bearer[addr] = true;
-  }
-
-  /**
-   * @dev remove an address' access to this role
-   */
-  function remove(Role storage role, address addr)
-    internal
-  {
-    role.bearer[addr] = false;
-  }
-
-  /**
-   * @dev check if an address has this role
-   * // reverts
-   */
-  function check(Role storage role, address addr)
-    view
-    internal
-  {
-    require(has(role, addr));
-  }
-
-  /**
-   * @dev check if an address has this role
-   * @return bool
-   */
-  function has(Role storage role, address addr)
-    view
-    internal
-    returns (bool)
-  {
-    return role.bearer[addr];
-  }
-}
-
-// File: openzeppelin-solidity/contracts/ownership/rbac/RBAC.sol
-
-/**
- * @title RBAC (Role-Based Access Control)
- * @author Matt Condon (@Shrugs)
- * @dev Stores and provides setters and getters for roles and addresses.
- * @dev Supports unlimited numbers of roles and addresses.
- * @dev See //contracts/mocks/RBACMock.sol for an example of usage.
- * This RBAC method uses strings to key roles. It may be beneficial
- *  for you to write your own implementation of this interface using Enums or similar.
- * It's also recommended that you define constants in the contract, like ROLE_ADMIN below,
- *  to avoid typos.
- */
-contract RBAC {
-  using Roles for Roles.Role;
-
-  mapping (string => Roles.Role) private roles;
-
-  event RoleAdded(address addr, string roleName);
-  event RoleRemoved(address addr, string roleName);
-
-  /**
-   * @dev reverts if addr does not have role
-   * @param addr address
-   * @param roleName the name of the role
-   * // reverts
-   */
-  function checkRole(address addr, string roleName)
-    view
-    public
-  {
-    roles[roleName].check(addr);
-  }
-
-  /**
-   * @dev determine if addr has role
-   * @param addr address
-   * @param roleName the name of the role
-   * @return bool
-   */
-  function hasRole(address addr, string roleName)
-    view
-    public
-    returns (bool)
-  {
-    return roles[roleName].has(addr);
-  }
-
-  /**
-   * @dev add a role to an address
-   * @param addr address
-   * @param roleName the name of the role
-   */
-  function addRole(address addr, string roleName)
-    internal
-  {
-    roles[roleName].add(addr);
-    emit RoleAdded(addr, roleName);
-  }
-
-  /**
-   * @dev remove a role from an address
-   * @param addr address
-   * @param roleName the name of the role
-   */
-  function removeRole(address addr, string roleName)
-    internal
-  {
-    roles[roleName].remove(addr);
-    emit RoleRemoved(addr, roleName);
-  }
-
-  /**
-   * @dev modifier to scope access to a single role (uses msg.sender as addr)
-   * @param roleName the name of the role
-   * // reverts
-   */
-  modifier onlyRole(string roleName)
-  {
-    checkRole(msg.sender, roleName);
-    _;
-  }
-
-  /**
-   * @dev modifier to scope access to a set of roles (uses msg.sender as addr)
-   * @param roleNames the names of the roles to scope access to
-   * // reverts
-   *
-   * @TODO - when solidity supports dynamic arrays as arguments to modifiers, provide this
-   *  see: https://github.com/ethereum/solidity/issues/2467
-   */
-  // modifier onlyRoles(string[] roleNames) {
-  //     bool hasAnyRole = false;
-  //     for (uint8 i = 0; i < roleNames.length; i++) {
-  //         if (hasRole(msg.sender, roleNames[i])) {
-  //             hasAnyRole = true;
-  //             break;
-  //         }
-  //     }
-
-  //     require(hasAnyRole);
-
-  //     _;
-  // }
-}
-
-// File: openzeppelin-solidity/contracts/ownership/Whitelist.sol
-
-/**
- * @title Whitelist
- * @dev The Whitelist contract has a whitelist of addresses, and provides basic authorization control functions.
- * @dev This simplifies the implementation of "user permissions".
- */
-contract Whitelist is Ownable, RBAC {
-  event WhitelistedAddressAdded(address addr);
-  event WhitelistedAddressRemoved(address addr);
-
-  string public constant ROLE_WHITELISTED = "whitelist";
-
-  /**
-   * @dev Throws if called by any account that's not whitelisted.
-   */
-  modifier onlyWhitelisted() {
-    checkRole(msg.sender, ROLE_WHITELISTED);
-    _;
-  }
-
-  /**
-   * @dev add an address to the whitelist
-   * @param addr address
-   * @return true if the address was added to the whitelist, false if the address was already in the whitelist
-   */
-  function addAddressToWhitelist(address addr)
-    onlyOwner
-    public
-  {
-    addRole(addr, ROLE_WHITELISTED);
-    emit WhitelistedAddressAdded(addr);
-  }
-
-  /**
-   * @dev getter to determine if address is in whitelist
-   */
-  function whitelist(address addr)
-    public
-    view
-    returns (bool)
-  {
-    return hasRole(addr, ROLE_WHITELISTED);
-  }
-
-  /**
-   * @dev add addresses to the whitelist
-   * @param addrs addresses
-   * @return true if at least one address was added to the whitelist,
-   * false if all addresses were already in the whitelist
-   */
-  function addAddressesToWhitelist(address[] addrs)
-    onlyOwner
-    public
-  {
-    for (uint256 i = 0; i < addrs.length; i++) {
-      addAddressToWhitelist(addrs[i]);
-    }
-  }
-
-  /**
-   * @dev remove an address from the whitelist
-   * @param addr address
-   * @return true if the address was removed from the whitelist,
-   * false if the address wasn't in the whitelist in the first place
-   */
-  function removeAddressFromWhitelist(address addr)
-    onlyOwner
-    public
-  {
-    removeRole(addr, ROLE_WHITELISTED);
-    emit WhitelistedAddressRemoved(addr);
-  }
-
-  /**
-   * @dev remove addresses from the whitelist
-   * @param addrs addresses
-   * @return true if at least one address was removed from the whitelist,
-   * false if all addresses weren't in the whitelist in the first place
-   */
-  function removeAddressesFromWhitelist(address[] addrs)
-    onlyOwner
-    public
-  {
-    for (uint256 i = 0; i < addrs.length; i++) {
-      removeAddressFromWhitelist(addrs[i]);
-    }
-  }
-
-}
-
-// File: openzeppelin-solidity/contracts/token/ERC20/BasicToken.sol
-
-/**
- * @title Basic token
- * @dev Basic version of StandardToken, with no allowances.
- */
-contract BasicToken is ERC20Basic {
-  using SafeMath for uint256;
-
-  mapping(address => uint256) balances;
-
-  uint256 totalSupply_;
-
-  /**
-  * @dev total number of tokens in existence
-  */
-  function totalSupply() public view returns (uint256) {
-    return totalSupply_;
-  }
-
-  /**
-  * @dev transfer token for a specified address
-  * @param _to The address to transfer to.
-  * @param _value The amount to be transferred.
-  */
-  function transfer(address _to, uint256 _value) public returns (bool) {
-    require(_to != address(0));
-    require(_value <= balances[msg.sender]);
-
-    balances[msg.sender] = balances[msg.sender].sub(_value);
-    balances[_to] = balances[_to].add(_value);
-    emit Transfer(msg.sender, _to, _value);
-    return true;
-  }
-
-  /**
-  * @dev Gets the balance of the specified address.
-  * @param _owner The address to query the the balance of.
-  * @return An uint256 representing the amount owned by the passed address.
-  */
-  function balanceOf(address _owner) public view returns (uint256) {
-    return balances[_owner];
-  }
-
-}
-
-// File: openzeppelin-solidity/contracts/token/ERC20/BurnableToken.sol
-
-/**
- * @title Burnable Token
- * @dev Token that can be irreversibly burned (destroyed).
- */
-contract BurnableToken is BasicToken {
-
-  event Burn(address indexed burner, uint256 value);
-
-  /**
-   * @dev Burns a specific amount of tokens.
-   * @param _value The amount of token to be burned.
-   */
-  function burn(uint256 _value) public {
-    _burn(msg.sender, _value);
-  }
-
-  function _burn(address _who, uint256 _value) internal {
-    require(_value <= balances[_who]);
-    // no need to require value <= totalSupply, since that would imply the
-    // sender's balance is greater than the totalSupply, which *should* be an assertion failure
-
-    balances[_who] = balances[_who].sub(_value);
-    totalSupply_ = totalSupply_.sub(_value);
-    emit Burn(_who, _value);
-    emit Transfer(_who, address(0), _value);
-  }
-}
-
 // File: contracts/grapevine/crowdsale/GrapevineCrowdsale.sol
 
 /**
@@ -1341,9 +780,15 @@ contract BurnableToken is BasicToken {
  * while being pausable.
  * @dev Grapevine Crowdsale
  **/
+contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, RefundableCrowdsale, PostDeliveryCrowdsale {
+  using SafeMath for uint256;
 
-contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, RefundableCrowdsale, Whitelist, PostDeliveryCrowdsale {
-  TokenTimelockController public timelockController;
+  TokenTimelockControllerInterface public timelockController;
+  GrapevineWhitelistInterface  public authorisedInvestors;
+  GrapevineWhitelistInterface public earlyInvestors;
+
+  mapping(address => uint256) public bonuses;
+
   uint256 deliveryTime;
   uint256 tokensToBeDelivered;
 
@@ -1358,7 +803,9 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     * @param _hardCap Max amount of wei to be contributed
     */
   constructor(
-    TokenTimelockController _timelockController,
+    TokenTimelockControllerInterface _timelockController,
+    GrapevineWhitelistInterface _authorisedInvestors,
+    GrapevineWhitelistInterface _earlyInvestors,
     uint256 _rate, 
     address _wallet,
     ERC20 _token, 
@@ -1373,9 +820,23 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     public 
     {
     timelockController = _timelockController;
+    authorisedInvestors = _authorisedInvestors;
+    earlyInvestors = _earlyInvestors;
     // token delivery starts 5 days after the crowdsale ends.
     deliveryTime = _closingTime.add(60*60*24*5);
     // deliveryTime = _closingTime.add(60*5);
+  }
+
+  /**
+   * @dev low level token purchase
+   * @param _beneficiary Address performing the token purchase
+   */
+  function buyTokens(address _beneficiary, bytes _whitelistSign) public payable {
+    // since the earlyInvestors are by definition autorised, we check first the earlyInvestors.
+    if (!earlyInvestors.handleOffchainWhitelisted(_beneficiary, _whitelistSign)) {
+      authorisedInvestors.handleOffchainWhitelisted(_beneficiary, _whitelistSign);
+    }
+    super.buyTokens(_beneficiary);
   }
 
   /**
@@ -1386,6 +847,19 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     // solium-disable-next-line security/no-block-members
     require(block.timestamp > deliveryTime);
     super.withdrawTokens();
+    uint256 _bonusTokens = bonuses[msg.sender];
+    if (_bonusTokens > 0) {
+      bonuses[msg.sender] = 0;
+      require(token.approve(address(timelockController), _bonusTokens));
+      require(
+        timelockController.createInvestorTokenTimeLock(
+          msg.sender,
+          _bonusTokens,
+          deliveryTime,
+          this
+        )
+      );
+    }
   }
 
   /**
@@ -1395,33 +869,29 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
    * @param _tokenAmount Number of tokens to be purchased
    */
   function _processPurchase( address _beneficiary, uint256 _tokenAmount ) internal {
-    tokensToBeDelivered = tokensToBeDelivered.add(_tokenAmount);
+    uint256 _totalTokens = _tokenAmount;
     // solium-disable-next-line security/no-block-members
     uint256 _bonus = getBonus(block.timestamp, _beneficiary, msg.value);
-    uint256 _bonusTokens = _tokenAmount.mul(_bonus).div(100);
-    // make sure the crowdsale contract has enough tokens to transfer the tokens and to create the timelock contract.
-    uint256 _currentBalance = token.balanceOf(this);
-    require(_currentBalance >= tokensToBeDelivered.add(_bonusTokens));
     if (_bonus>0) {
-      require(token.approve(address(timelockController), _bonusTokens));
-      require(
-        timelockController.createInvestorTokenTimeLock(
-          _beneficiary,
-          _bonusTokens,
-          deliveryTime,
-          this
-        )
-      );
+      uint256 _bonusTokens = _tokenAmount.mul(_bonus).div(100);
+      // make sure the crowdsale contract has enough tokens to transfer the purchased tokens and to create the timelock bonus.
+      uint256 _currentBalance = token.balanceOf(this);
+      require(_currentBalance >= _totalTokens.add(_bonusTokens));
+      bonuses[_beneficiary] = bonuses[_beneficiary].add(_bonusTokens);
+      _totalTokens = _totalTokens.add(_bonusTokens);
     }
+    tokensToBeDelivered = tokensToBeDelivered.add(_totalTokens);
     super._processPurchase(_beneficiary, _tokenAmount);
   }
 
   /**
-   * @dev Validation of an incoming purchase. Allowas purchases only when crowdsale is not paused.
+   * @dev Validation of an incoming purchase. Allowas purchases only when crowdsale is not paused and the _beneficiary is authorized to buy.
+   * The early investors went through the KYC process, so they are authorised by default.
    * @param _beneficiary Address performing the token purchase
    * @param _weiAmount Value in wei involved in the purchase
    */
   function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal whenNotPaused {
+    require(authorisedInvestors.whitelist(_beneficiary) || earlyInvestors.whitelist(_beneficiary));
     super._preValidatePurchase(_beneficiary, _weiAmount);
   }
 
@@ -1429,10 +899,10 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
    * @dev Computes the bonus. The bonus is
    * - 0 by default
    * - 30% before reaching the softCap for those whitelisted.
-   * - 15% the first 8 days
-   * - 10% the next 8 days
-   * - 8% the next 8 days
-   * - 6% the next 6 days
+   * - 15% the first week
+   * - 10% the second week
+   * - 8% the third week
+   * - 6% the remaining time.
    * @param _time when the purchased happened.
    * @param _beneficiary Address performing the token purchase.
    * @param _value Value in wei involved in the purchase.
@@ -1442,16 +912,16 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     _bonus = 0;
     
     // at this level the amount was added to weiRaised
-    if ( (weiRaised.sub(_value) < goal) && whitelist(_beneficiary)) {
+    if ( (weiRaised.sub(_value) < goal) && earlyInvestors.whitelist(_beneficiary) ) {
       _bonus = 30;
     } else {
-      if (_time < openingTime.add(8 days)) {
+      if (_time < openingTime.add(7 days)) {
         _bonus = 15;
-      } else if (_time < openingTime.add(16 days)) {
+      } else if (_time < openingTime.add(14 days)) {
         _bonus = 10;
-      } else if (_time < openingTime.add(24 days)) {
+      } else if (_time < openingTime.add(21 days)) {
         _bonus = 8;
-      } else if (_time < openingTime.add(30 days)) {
+      } else {
         _bonus = 6;
       }
     }
@@ -1461,22 +931,22 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
   /**
    * @dev Performs the finalization tasks:
    * - if goal reached, activate the controller and burn the remaining tokens
-   * - transfer the ownershoip of the token contract back to the owner.
+   * - transfer the ownership of the token contract back to the owner.
    */
   function finalization() internal {
-    // only when the goal is reached we burn the tokens
+    // only when the goal is reached we burn the tokens and activate the controller.
     if (goalReached()) {
+      // activate the controller to enable the investors and team members 
+      // to claim their tokens when the time comes.
       timelockController.activate();
-      timelockController.setCrowdsaleEnded();
 
       // calculate the quantity of tokens to be burnt. The bonuses are already transfered to the Controller.
       uint256 balance = token.balanceOf(this);
       uint256 remainingTokens = balance.sub(tokensToBeDelivered);
       if (remainingTokens>0) {
-        BurnableToken(address(token)).burn(remainingTokens);
+        BurnableTokenInterface(address(token)).burn(remainingTokens);
       }
     }
-
     Ownable(address(token)).transferOwnership(owner);
     super.finalization();
   }
