@@ -163,10 +163,13 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
    * - transfer the ownershoip of the token contract back to the owner.
    */
   function finalization() internal {
-    // only when the goal is reached we burn the tokens
+    // notify the controller that the crowdsale ended.
+    timelockController.setCrowdsaleEnded();
+    // only when the goal is reached we burn the tokens.
     if (goalReached()) {
+      // activate the controller to enable the investors and team members 
+      // to claim their tokens when the time comes.
       timelockController.activate();
-      timelockController.setCrowdsaleEnded();
 
       // calculate the quantity of tokens to be burnt. The bonuses are already transfered to the Controller.
       uint256 balance = token.balanceOf(this);
@@ -175,7 +178,6 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
         BurnableTokenInterface(address(token)).burn(remainingTokens);
       }
     }
-
     Ownable(address(token)).transferOwnership(owner);
     super.finalization();
   }

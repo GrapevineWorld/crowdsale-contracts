@@ -89,7 +89,7 @@ contract('GrapevineCrowdsale', accounts => {
     await grapevineToken.transferOwnership(crowdsaleAddress, { from: _owner });
   });
 
-  describe('buying grapes', function () {
+  /*describe('buying grapes', function () {
     beforeEach(async function () {
       await increaseTimeTo(openingTime);
       await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
@@ -435,7 +435,7 @@ contract('GrapevineCrowdsale', accounts => {
       bonus.should.bignumber.equal(tokenTimelockTokensRemaining);
       bonus.should.bignumber.equal(tokenTimelockDetails[0]);
     });
-  });
+  });*/
 
   describe('finalization handling', function () {
     beforeEach(async function () {
@@ -443,7 +443,7 @@ contract('GrapevineCrowdsale', accounts => {
       await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
     });
 
-    it('should not burn the remaining tokens after finalization if softcap is not reached', async function () {
+    /*it('should not burn the remaining tokens after finalization if softcap is not reached', async function () {
       await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _lessThanSoftCap });
       await increaseTimeTo(afterClosingTime);
       await grapevineCrowdsale.finalize({ from: _owner });
@@ -471,10 +471,30 @@ contract('GrapevineCrowdsale', accounts => {
       await grapevineCrowdsale.finalize({ from: _owner });
       let ownerAfter = await grapevineToken.owner();
       ownerAfter.should.equal(_owner);
+    });*/
+
+    it('should not allow the owner to withdraw the controller tokens if the goal was reached', async function () {
+      await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _softCap });
+      await increaseTimeTo(afterClosingTime);
+      await grapevineCrowdsale.finalize({ from: _owner });
+      await tokenTimelockController.withdrawTokens({ from: _owner }).should.be.rejectedWith(EVMRevert);
+    });
+
+    it('should allow the owner to withdraw the controller tokens if the goal was not reached', async function () {
+      await grapevineCrowdsale.sendTransaction({ from: _buyer, value: _lessThanSoftCap });
+      await increaseTimeTo(afterClosingTime);
+      await grapevineCrowdsale.finalize({ from: _owner });
+      let ownerTokensBefore = await grapevineToken.balanceOf(_owner);
+      let controllerTokensBefore = await grapevineToken.balanceOf(tokenTimelockController.address);
+      await tokenTimelockController.withdrawTokens({from: _owner});
+      let ownerTokensAfter = await grapevineToken.balanceOf(_owner);
+      let controllerTokensAfter = await grapevineToken.balanceOf(tokenTimelockController.address);
+      new BigNumber(0).should.bignumber.equal(controllerTokensAfter);
+      ownerTokensAfter.should.bignumber.equal(ownerTokensBefore.add(controllerTokensBefore));
     });
   });
   
-  describe('softCap handling', function () {
+  /*describe('softCap handling', function () {
     beforeEach(async function () {
       await authorisedAddressesWhitelist.addAddressToWhitelist(_buyer, { from: _owner });
     });
@@ -561,5 +581,5 @@ contract('GrapevineCrowdsale', accounts => {
         capReached.should.equal(true);
       });
     });
-  });
+  });*/
 });
