@@ -1,14 +1,14 @@
 pragma solidity ^0.4.23;
 
-import "./GrapevineWhitelist.sol";
-import "./TokenTimelockController.sol";
+import "./GrapevineWhitelistInterface.sol";
+import "./TokenTimelockControllerInterface.sol";
+import "./BurnableTokenInterface.sol";
 import "openzeppelin-solidity/contracts/ownership/Whitelist.sol";
 import "openzeppelin-solidity/contracts/crowdsale/distribution/RefundableCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/distribution/PostDeliveryCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/WhitelistedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/TimedCrowdsale.sol";
 import "openzeppelin-solidity/contracts/crowdsale/validation/CappedCrowdsale.sol";
-import "openzeppelin-solidity/contracts/token/ERC20/BurnableToken.sol";
 import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
 
 
@@ -17,13 +17,12 @@ import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
  * while being pausable.
  * @dev Grapevine Crowdsale
  **/
-
 contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, RefundableCrowdsale, PostDeliveryCrowdsale {
   using SafeMath for uint256;
 
-  TokenTimelockController public timelockController;
-  GrapevineWhitelist public authorisedInvestors;
-  GrapevineWhitelist public earlyInvestors;
+  TokenTimelockControllerInterface public timelockController;
+  GrapevineWhitelistInterface  public authorisedInvestors;
+  GrapevineWhitelistInterface public earlyInvestors;
 
   mapping(address => uint256) public bonuses;
 
@@ -41,9 +40,9 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
     * @param _hardCap Max amount of wei to be contributed
     */
   constructor(
-    TokenTimelockController _timelockController,
-    GrapevineWhitelist _authorisedInvestors,
-    GrapevineWhitelist _earlyInvestors,
+    TokenTimelockControllerInterface _timelockController,
+    GrapevineWhitelistInterface _authorisedInvestors,
+    GrapevineWhitelistInterface _earlyInvestors,
     uint256 _rate, 
     address _wallet,
     ERC20 _token, 
@@ -173,7 +172,7 @@ contract GrapevineCrowdsale is CappedCrowdsale, TimedCrowdsale, Pausable, Refund
       uint256 balance = token.balanceOf(this);
       uint256 remainingTokens = balance.sub(tokensToBeDelivered);
       if (remainingTokens>0) {
-        BurnableToken(address(token)).burn(remainingTokens);
+        BurnableTokenInterface(address(token)).burn(remainingTokens);
       }
     }
 
