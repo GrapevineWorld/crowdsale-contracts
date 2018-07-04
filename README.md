@@ -58,7 +58,7 @@ $ npm run migrate:testnet
 $ npm run console:testnet
 ```
 
-*The contracts are not yet audited*. 
+*The contracts are audited by Venture Boost and the reports can be found under the audit directory. 
 
 # Contributors
 
