@@ -3,37 +3,55 @@ require('babel-register')({
 });
 require('babel-polyfill');
 
-/*var provider;
-var HDWalletProvider = require('truffle-hdwallet-provider');
-var mnemonic = 'oyster never pudding resource sheriff force behave bone fly mandate winter run';
+require('dotenv').config();
+let NonceTrackerSubprovider = require("web3-provider-engine/subproviders/nonce-tracker")
 
+var HDWalletProvider;
+var accessKey;
+if (process.env.MNEMONIC) {
+  HDWalletProvider = require('truffle-hdwallet-provider');
+  accessKey = process.env.MNEMONIC;
+} else {
+  if (process.env.PRIVATE_KEY) {
+    HDWalletProvider = require("truffle-hdwallet-provider-privkey");
+    accessKey = process.env.PRIVATE_KEY;
+  }
+}
 
-provider = new HDWalletProvider(mnemonic, 'https://ropsten.infura.io/');*/
 module.exports = {
   networks: {
     development: {
-        host: "localhost",
-        port: 8545,
-        network_id: "*" // Match any network id
+      host: "localhost",
+      port: 8545,
+      network_id: "*", // Match any network id
     },
     coverage: {
       host: "localhost",
       port: 8545,
       network_id: "*",
       gas: 0xfffffffffff, 
-      gasPrice: 0x0
+      gasPrice: 0x0,
     },
     rinkeby: {
-      host: "localhost", // Connect to geth on the specified
-      port: 8545,
-      network_id: "4",
-      gas: 6000000 // Gas limit used for deploys
-    },
-    /*rinkeby: {
-      provider: provider,
+      provider: new HDWalletProvider(accessKey, 'https://rinkeby.infura.io/'+process.env.INFURA_API_KEY),
       network_id: "4", // official id of the rinkeby network
-      gas: 6000000 // Gas limit used for deploys
-    },*/
+      gas: 6000000, // Gas limit used for deploys
+      gasPrice: 2000000000, //2 Gwei
+      from: process.env.OWNER
+    },
+    mainnet: {
+      provider: new HDWalletProvider(accessKey, 'https://mainnet.infura.io/'+process.env.INFURA_API_KEY),
+        /*var wallet = new HDWalletProvider(accessKey, 'https://mainnet.infura.io/'+process.env.INFURA_API_KEY);
+        var nonceTracker = new NonceTrackerSubprovider();
+        wallet.engine._providers.unshift(nonceTracker);
+        nonceTracker.setEngine(wallet.engine);
+        return wallet;
+        },*/
+      network_id: "1", // official id of the mainnet network
+      gas: 3000000, // Gas limit used for deploys
+      gasPrice: 50000000000, //2 Gwei
+      from: process.env.OWNER
+    },
   },
   solc: {
     optimizer: {

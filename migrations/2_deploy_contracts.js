@@ -5,33 +5,52 @@ const GrapevineToken = artifacts.require('GrapevineToken.sol');
 const TokenTimelockController = artifacts.require('TokenTimelockController.sol');
 
 module.exports = async function (deployer, network, accounts) {
+
   var openingTime;
   // owner of the crowdsale
-  const owner = web3.eth.accounts[0];
+  var owner;
   
   // wallet where the ehter will get deposited
-  const wallet = web3.eth.accounts[2];
+  var wallet;
   
   // authorisation signer
-  const authorisationSigner = web3.eth.accounts[3];
+  var authorisationSigner;
 
   // early investor signer
-  const earlyInvestorSigner = web3.eth.accounts[4];
+  var earlyInvestorSigner;
   
   const saleTokenPercentage = 0.45;
 
-  const rate = new web3.BigNumber(1);
-  const hardCap = web3.toWei(10, 'ether');
-  const softCap = web3.toWei(1, 'ether');
-
-  if (network === 'rinkeby') {
-    openingTime = web3.eth.getBlock('latest').timestamp + 300; // five minutes in the future
+  const rate = new web3.BigNumber(4667);
+  const hardCap = web3.toWei(62044.6948920123, 'ether');
+  const softCap = web3.toWei(6156.0314236476, 'ether');
+  
+  //let openingDate = new Date(2018, 5, 14, 14, 00, 00);  
+  let openingDate = new Date();
+  const now = Math.floor(new Date().getTime()/1000);
+  if (network === 'rinkeby' || network === 'mainnet') {
+    console.log('rinkeby or rinkeby');
+    openingTime = now + 1800; // 30mn in the future
+    owner = process.env.OWNER;
+    wallet = process.env.WALLET;
+    authorisationSigner = process.env.AUTHORISATION_SIGNER;
+    earlyInvestorSigner = process.env.EARLY_INVESTOR_SIGNER;
   } else {
-    openingTime = web3.eth.getBlock('latest').timestamp + 60; // thirty seconds in the future
+    console.log('ganache');
+
+    openingTime = now + 60; // one minute in the future
+    owner = accounts[0];
+    wallet = accounts[1];
+    authorisationSigner = accounts[2];
+    earlyInvestorSigner = accounts[3];
   }
 
-  const closingTime = openingTime + 86400 * 30; // 30 days
-  // const closingTime = openingTime + 600; // 10 mn
+
+  const closingTime = openingTime + 1800;
+
+  //official values
+  //openingTime = 1530849600;
+  //const closingTime = 1534334400;
 
   console.log('openingTime: ' + openingTime);
   console.log('closingTime: ' + closingTime);
@@ -42,7 +61,7 @@ module.exports = async function (deployer, network, accounts) {
   let earlyInvestorsAddressesWhitelist;
   return deployer.then(function () {
     // deploy SafeMath first
-    return deployer.deploy(SafeMath);
+    return deployer.deploy(SafeMath, { from: owner });
   }).then(function () {
     // link SafeMath
     return deployer.link(
